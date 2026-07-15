@@ -1,3 +1,3 @@
 # GPU_genomics_project
 
-Progetto read me cose da fare: TODO 
+link to colab: https://colab.research.google.com/drive/14WG_f6NDwkZEdQM9EPUSbKjZE3KhUxIF#scrollTo=BHum1jCKckWj
