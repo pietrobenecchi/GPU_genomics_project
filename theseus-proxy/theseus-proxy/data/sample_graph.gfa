@@ -1,0 +1,9 @@
+S	1	ACTTAG
+S	2	ACA
+S	3	T
+S	4	GTACTT
+L	1	+	2	+	0M
+L	1	+	3	+	0M
+L	2	+	4	+	0M
+L	3	+	4	+	0M
+L	4	+	1	+	0M
