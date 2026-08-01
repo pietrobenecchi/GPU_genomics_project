@@ -50,6 +50,7 @@ class Alignment {
       std::vector<int> path;     // Path of the alignment
       int start_offset;      // Start offset in the first vertex of the path
       int end_offset;        // End offset in the last vertex of the path
+      int query_length = 0;  // Length of the aligned query
 
 
       // Compute the affine gap score of the CIGAR,

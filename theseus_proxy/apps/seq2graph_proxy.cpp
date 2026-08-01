@@ -11,6 +11,8 @@
 #include "theseus/penalties.h"
 #include "theseus/theseus_aligner.h"
 
+enum class Backend { Cpu, Gpu };
+
 struct CmdArgs {
   int match = 0;
   int mismatch = 2;
@@ -19,6 +21,14 @@ struct CmdArgs {
   std::string graph_file;
   std::string sequences_file;
   std::string output_file;
+  Backend backend = Backend::Cpu;
+};
+
+// Sequences to align, together with where each one starts in the graph.
+struct Inputs {
+  std::vector<std::string> sequences;
+  std::vector<std::string> start_vertices;
+  std::vector<int> start_offsets;
 };
 
 void help() {
@@ -31,7 +41,8 @@ void help() {
       << "  -e, --gape <int>             Gap-extend penalty (default 1)\n"
       << "  -g, --graph_file <file>      Graph file in GFA format (required)\n"
       << "  -s, --sequences_file <file>  FASTA with start metadata (required)\n"
-      << "  -f, --output_file <file>     Output GAF path (required)\n";
+      << "  -f, --output_file <file>     Output GAF path (required)\n"
+      << "  -b, --backend <cpu|gpu>      Alignment backend (default cpu)\n";
 }
 
 CmdArgs parse_args(int argc, char *const *argv) {
@@ -43,12 +54,13 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"graph_file", required_argument, nullptr, 'g'},
       {"sequences_file", required_argument, nullptr, 's'},
       {"output_file", required_argument, nullptr, 'f'},
+      {"backend", required_argument, nullptr, 'b'},
       {nullptr, 0, nullptr, 0}};
 
   CmdArgs args;
   int option_index = 0;
   int opt;
-  while ((opt = getopt_long(argc, argv, "m:x:o:e:g:s:f:", long_options,
+  while ((opt = getopt_long(argc, argv, "m:x:o:e:g:s:f:b:", long_options,
                             &option_index)) != -1) {
     switch (opt) {
       case 'm':
@@ -72,6 +84,18 @@ CmdArgs parse_args(int argc, char *const *argv) {
       case 'f':
         args.output_file = optarg;
         break;
+      case 'b': {
+        const std::string backend = optarg;
+        if (backend == "cpu") {
+          args.backend = Backend::Cpu;
+        } else if (backend == "gpu") {
+          args.backend = Backend::Gpu;
+        } else {
+          std::cerr << "Invalid backend: " << backend << " (expected cpu or gpu)\n";
+          std::exit(1);
+        }
+        break;
+      }
       default:
         std::cerr << "Invalid option\n";
         std::exit(1);
@@ -81,11 +105,11 @@ CmdArgs parse_args(int argc, char *const *argv) {
   return args;
 }
 
-void read_seq_pos_data(
-    std::ifstream &sp_file,
-    std::vector<std::string> &sequences,
-    std::vector<std::string> &start_vertices,
-    std::vector<int> &start_offsets) {
+void read_seq_pos_data(std::ifstream &sp_file, Inputs &inputs) {
+  std::vector<std::string> &sequences = inputs.sequences;
+  std::vector<std::string> &start_vertices = inputs.start_vertices;
+  std::vector<int> &start_offsets = inputs.start_offsets;
+
   if (!sp_file.is_open()) {
     throw std::runtime_error("Could not open sequences file");
   }
@@ -137,6 +161,38 @@ void read_seq_pos_data(
   }
 }
 
+/**
+ * @brief Align every sequence on the CPU, one at a time.
+ */
+void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
+             std::ostream &out_stream) {
+  for (size_t i = 0; i < inputs.sequences.size(); ++i) {
+    theseus::Alignment aln = aligner.align(
+        inputs.sequences[i], inputs.start_vertices[i], inputs.start_offsets[i]);
+    aligner.print_alignment_as_gaf(aln, out_stream, "seq_" + std::to_string(i));
+  }
+}
+
+/**
+ * @brief Align the whole batch through the GPU backend.
+ *
+ * The backend falls back to the CPU when it cannot do the work, so the status it
+ * reports is written to stderr rather than assumed.
+ */
+void run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
+             std::ostream &out_stream) {
+  theseus::GpuBatchReport report;
+  std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
+      inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report);
+
+  for (size_t i = 0; i < alignments.size(); ++i) {
+    aligner.print_alignment_as_gaf(alignments[i], out_stream,
+                                   "seq_" + std::to_string(i));
+  }
+
+  std::cerr << "GPU backend: " << report.message << "\n";
+}
+
 int main(int argc, char *const *argv) {
   CmdArgs args = parse_args(argc, argv);
 
@@ -168,24 +224,23 @@ int main(int argc, char *const *argv) {
   theseus::Penalties penalties(args.match, args.mismatch, args.gapo, args.gape);
   theseus::TheseusAligner aligner(penalties, graph_file);
 
-  std::vector<std::string> sequences;
-  std::vector<std::string> start_vertices;
-  std::vector<int> start_offsets;
-  read_seq_pos_data(seq_file, sequences, start_vertices, start_offsets);
+  Inputs inputs;
+  read_seq_pos_data(seq_file, inputs);
 
   auto start = std::chrono::steady_clock::now();
 
-  for (size_t i = 0; i < sequences.size(); ++i) {
-    theseus::Alignment aln =
-        aligner.align(sequences[i], start_vertices[i], start_offsets[i]);
-    aligner.print_alignment_as_gaf(aln, output_file, "seq_" + std::to_string(i));
+  if (args.backend == Backend::Gpu) {
+    run_gpu(aligner, inputs, output_file);
+  } else {
+    run_cpu(aligner, inputs, output_file);
   }
 
   auto end = std::chrono::steady_clock::now();
   auto micros =
       std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  std::cout << "Aligned " << sequences.size() << " sequences in " << micros
-            << " microseconds\n";
+  std::cout << "Aligned " << inputs.sequences.size() << " sequences in "
+            << micros << " microseconds on "
+            << (args.backend == Backend::Gpu ? "gpu" : "cpu") << "\n";
 
   return 0;
 }

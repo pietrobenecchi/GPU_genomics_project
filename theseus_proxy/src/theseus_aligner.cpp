@@ -1,0 +1,296 @@
+/*
+ *                             The MIT License
+ *
+ * Copyright (c) 2024 by Albert Jimenez-Blanco
+ *
+ * This file is part of #################### Theseus Library ####################.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ */
+
+
+#include "theseus/theseus_aligner.h"
+
+#include <cstdint>
+
+#include "gpu/align_gpu.h"
+#include "theseus_aligner_impl.h"
+
+namespace theseus {
+
+TheseusAligner::TheseusAligner(const Penalties &penalties,
+                               std::istream &gfa_stream)
+{
+    Graph graph(gfa_stream);
+    aligner_impl_ = std::make_unique<TheseusAlignerImpl>(penalties, std::move(graph));
+}
+
+
+TheseusAligner::~TheseusAligner() {}
+
+void TheseusAligner::print_alignment_as_gaf(
+                theseus::Alignment &alignment,
+                std::ostream &out_stream,
+                std::string seq_name) {
+
+    aligner_impl_->print_as_gaf(alignment, out_stream, seq_name);
+}
+
+/**
+ * @brief Main alignment function for the Theseus aligner.
+ *
+ * @param seq
+ * @param start_node
+ * @param start_offset
+ * @return Alignment
+ */
+Alignment TheseusAligner::align(
+    std::string_view seq,
+    std::string &start_node,
+    int start_offset) {
+
+    return aligner_impl_->align(seq, start_node, start_offset);
+}
+
+Alignment TheseusAligner::align_gpu(
+    std::string_view seq,
+    std::string &start_node,
+    int start_offset) {
+
+    // A single sequence never justifies a host-to-device transfer, so there is
+    // no device path here. align_batch_gpu is where the GPU work belongs.
+    return aligner_impl_->align(seq, start_node, start_offset);
+}
+
+namespace {
+
+/**
+ * @brief Read the uploaded graph back and check it against the host CSR.
+ *
+ * @param device_graph  Graph in device memory
+ * @param host_csr      What the graph should be
+ * @return              Description of the outcome, for GpuBatchReport::message
+ */
+std::string verify_device_graph(gpu::DeviceGraph *device_graph,
+                                const gpu::GraphCsr &host_csr) {
+
+    std::vector<char> chars(host_csr.num_chars());
+    std::vector<int32_t> vertex_offsets(host_csr.num_vertices() + 1);
+    std::vector<int32_t> edge_targets(host_csr.num_edges());
+    std::vector<int32_t> edge_overlaps(host_csr.num_edges());
+    std::vector<int32_t> edge_offsets(host_csr.num_vertices() + 1);
+
+    const gpu::Status status =
+        gpu::readback_graph(device_graph, chars.data(), vertex_offsets.data(),
+                            edge_targets.data(), edge_overlaps.data(),
+                            edge_offsets.data());
+    if (status != gpu::Status::Ok) {
+        return std::string("; graph readback failed: ") + gpu::status_message(status);
+    }
+
+    const bool matches = chars == host_csr.vertex_chars() &&
+                         vertex_offsets == host_csr.vertex_offsets() &&
+                         edge_targets == host_csr.edge_targets() &&
+                         edge_overlaps == host_csr.edge_overlaps() &&
+                         edge_offsets == host_csr.edge_offsets();
+    if (!matches) {
+        return "; GRAPH CSR MISMATCH, device cannot read the graph";
+    }
+
+    return "; graph CSR verified on device (" +
+           std::to_string(host_csr.num_vertices()) + " vertices, " +
+           std::to_string(host_csr.num_chars()) + " bases, " +
+           std::to_string(host_csr.num_edges()) + " edges)";
+}
+
+bool same_align_result(const gpu::AlignResult &a, const gpu::AlignResult &b) {
+    return a.score == b.score &&
+           a.end_vertex_id == b.end_vertex_id &&
+           a.end_offset == b.end_offset &&
+           a.end_diag == b.end_diag &&
+           a.end_prev_pos == b.end_prev_pos &&
+           a.end_from_matrix == b.end_from_matrix &&
+           a.reached_end == b.reached_end &&
+           a.capacity_exceeded == b.capacity_exceeded;
+}
+
+std::string describe_align_result_mismatch(size_t idx, const gpu::AlignResult &gpu,
+                                           const gpu::AlignResult &cpu) {
+    return "; GPU ALIGN RESULT MISMATCH at query " + std::to_string(idx) +
+           " gpu(score=" + std::to_string(gpu.score) +
+           ",v=" + std::to_string(gpu.end_vertex_id) +
+           ",off=" + std::to_string(gpu.end_offset) +
+           ",diag=" + std::to_string(gpu.end_diag) +
+           ",prev=" + std::to_string(gpu.end_prev_pos) +
+           ",mat=" + std::to_string(gpu.end_from_matrix) +
+           ",end=" + std::to_string(gpu.reached_end) +
+           ",cap=" + std::to_string(gpu.capacity_exceeded) +
+           ") cpu(score=" + std::to_string(cpu.score) +
+           ",v=" + std::to_string(cpu.end_vertex_id) +
+           ",off=" + std::to_string(cpu.end_offset) +
+           ",diag=" + std::to_string(cpu.end_diag) +
+           ",prev=" + std::to_string(cpu.end_prev_pos) +
+           ",mat=" + std::to_string(cpu.end_from_matrix) +
+           ",end=" + std::to_string(cpu.reached_end) +
+           ",cap=" + std::to_string(cpu.capacity_exceeded) + ")";
+}
+
+}  // namespace
+
+/**
+ * @brief Batched GPU alignment entry point.
+ *
+ * @param seqs
+ * @param start_nodes
+ * @param start_offsets
+ * @param report
+ * @return std::vector<Alignment>
+ */
+std::vector<Alignment> TheseusAligner::align_batch_gpu(
+    const std::vector<std::string> &seqs,
+    std::vector<std::string> &start_nodes,
+    std::vector<int> &start_offsets,
+    GpuBatchReport *report) {
+
+    // Flatten into the concatenated layout the device consumes. This is built
+    // even though the alignment still happens on the CPU, so that the upload
+    // path is exercised by every GPU run rather than only once the kernel lands.
+    std::vector<char> chars;
+    std::vector<int32_t> offsets;
+    std::vector<int32_t> start_node_ids;
+    std::vector<int32_t> start_offset_values;
+    offsets.reserve(seqs.size() + 1);
+    start_node_ids.reserve(start_nodes.size());
+    start_offset_values.reserve(start_offsets.size());
+    offsets.push_back(0);
+    for (size_t i = 0; i < seqs.size(); ++i) {
+        const auto &seq = seqs[i];
+        chars.insert(chars.end(), seq.begin(), seq.end());
+        offsets.push_back(static_cast<int32_t>(chars.size()));
+        start_node_ids.push_back(aligner_impl_->graph_vertex_id(start_nodes[i]));
+        start_offset_values.push_back(static_cast<int32_t>(start_offsets[i]));
+    }
+
+    // Uploaded once per aligner, on the first GPU batch.
+    gpu::DeviceGraph *device_graph = aligner_impl_->device_graph();
+
+    gpu::BatchView view{chars.data(), offsets.data(),
+                        static_cast<int32_t>(seqs.size())};
+    std::vector<int32_t> device_lengths(seqs.size(), -1);
+    std::vector<gpu::AlignResult> device_results(seqs.size());
+    std::vector<QueryState> device_states(seqs.size());
+    const gpu::Status status = gpu::align_batch(
+        view, device_graph, start_node_ids.data(), start_offset_values.data(),
+        aligner_impl_->gpu_scoring(), device_results.data(), device_states.data(),
+        device_lengths.data());
+
+    if (report != nullptr) {
+        report->device_used = (status == gpu::Status::Ok ||
+                               status == gpu::Status::NotImplemented);
+        report->aligned_on_device = (status == gpu::Status::Ok);
+        report->message = gpu::status_message(status);
+
+        const char *error = gpu::last_error();
+        if (error != nullptr && error[0] != '\0') {
+            report->message += std::string(" (") + error + ")";
+        }
+
+        if (report->device_used) {
+            bool layout_ok = true;
+            for (size_t i = 0; i < seqs.size(); ++i) {
+                if (device_lengths[i] != static_cast<int32_t>(seqs[i].size())) {
+                    layout_ok = false;
+                    break;
+                }
+            }
+            report->message += layout_ok
+                    ? "; batch layout verified on device"
+                    : "; BATCH LAYOUT MISMATCH, upload is wrong";
+
+            report->message +=
+                verify_device_graph(device_graph, aligner_impl_->graph_csr());
+        }
+    }
+
+    std::vector<Alignment> alignments;
+    std::vector<gpu::AlignResult> cpu_results;
+    alignments.reserve(seqs.size());
+    cpu_results.reserve(seqs.size());
+    for (size_t i = 0; i < seqs.size(); ++i) {
+        alignments.push_back(
+            aligner_impl_->align(seqs[i], start_nodes[i], start_offsets[i]));
+        cpu_results.push_back(aligner_impl_->last_align_result());
+    }
+
+    bool use_gpu_backtrace = false;
+    if (report != nullptr && report->device_used) {
+        bool result_ok = true;
+        size_t mismatch_idx = 0;
+        for (size_t i = 0; i < seqs.size(); ++i) {
+            if (!same_align_result(device_results[i], cpu_results[i])) {
+                result_ok = false;
+                mismatch_idx = i;
+                break;
+            }
+        }
+        use_gpu_backtrace = result_ok;
+        report->message += result_ok
+            ? "; naive align kernel result verified against CPU"
+            : describe_align_result_mismatch(mismatch_idx, device_results[mismatch_idx],
+                                             cpu_results[mismatch_idx]);
+    }
+
+    if (use_gpu_backtrace) {
+        alignments.clear();
+        alignments.reserve(seqs.size());
+        for (size_t i = 0; i < seqs.size(); ++i) {
+            alignments.push_back(aligner_impl_->alignment_from_gpu_result(
+                seqs[i], start_offsets[i], device_states[i], device_results[i]));
+        }
+        if (report != nullptr) {
+            report->message += "; GAF reconstructed from GPU QueryState with host backtrace";
+        }
+    }
+
+    // Checked after aligning, not before: the wavefronts only grow while the
+    // algorithm runs. A fixed-size device buffer would have been overrun here.
+    // One check for every fixed-capacity buffer in the flattened QueryState:
+    // ScratchPad span, BeyondScope wavefronts and the Scope ring. Their sizes are
+    // fixed, so an overflow would have meant a device buffer read or write past
+    // its end. Checked after aligning, not before: the buffers only fill while
+    // the algorithm runs.
+    if (report != nullptr && aligner_impl_->query_state_capacity_exceeded()) {
+        report->query_state_capacity_exceeded = true;
+        report->wavefront_capacity_exceeded = true;  // same underlying cause
+        report->message +=
+            "; QUERYSTATE CAPACITY EXCEEDED, a fixed buffer was too small "
+            "(scratchpad span " + std::to_string(kScratchpadSpan) +
+            ", beyond-scope " + std::to_string(kBeyondScopeCapacity) +
+            ", scope wavefront " + std::to_string(kScopeWavefrontCapacity) +
+            "); peak per-score wavefront was " +
+            std::to_string(aligner_impl_->peak_wavefront_capacity()) +
+            " cells; the GPU port needs real bounds before this data can run on "
+            "device";
+    }
+
+    return alignments;
+}
+
+} // namespace theseus

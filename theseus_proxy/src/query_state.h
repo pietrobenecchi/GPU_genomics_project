@@ -1,0 +1,683 @@
+/*
+ *                             The MIT License
+ *
+ * Copyright (c) 2024 by Albert Jimenez-Blanco
+ *
+ * This file is part of #################### Theseus Library ####################.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ *
+ */
+
+
+#pragma once
+
+#include <cstdint>
+
+#include "cell.h"
+
+#ifdef __CUDACC__
+#define THESEUS_HD __host__ __device__
+#else
+#define THESEUS_HD
+#endif
+
+/*
+ * QueryState is the whole per-query working set of the aligner, laid out as flat
+ * POD arrays with fixed capacities so that device code (which cannot allocate or
+ * grow a buffer once a kernel is running) can own one instance per query.
+ *
+ * It is being filled in one structure at a time, following the CPU-first method:
+ * each dynamic structure of the aligner is replaced by a fixed-capacity flat
+ * mirror here, the algorithm is repointed at it, and the output is checked
+ * byte-for-byte against the baseline before moving on. The first structure moved
+ * is the ScratchPad.
+ *
+ * Every capacity here is PROVISIONAL, tuned to the toy sample dataset, exactly
+ * like kProvisionalWavefrontCapacity. When a real dataset arrives the peaks have
+ * to be measured and the bounds re-derived. Overflow is never silent: it sets
+ * QueryState::capacity_exceeded so the day a buffer is too small is not the day a
+ * kernel reads past its end.
+ */
+
+namespace theseus {
+
+/**
+ * @brief Diagonals the flattened ScratchPad wavefront is built to hold.
+ *
+ * The CPU ScratchPad defaults to the window [-1024, 1024] and only ever grows it,
+ * so on the sample data (where it never grows) this span reproduces its indexing
+ * exactly. PROVISIONAL: a real bound comes from max query length and max vertex
+ * length, not from this dataset.
+ */
+constexpr int kScratchpadSpan = 2049;  // covers diagonals [-1024, 1024]
+
+/**
+ * @brief Cells each accumulating backtrace wavefront (BeyondScope) is built to
+ * hold.
+ *
+ * These wavefronts grow for the whole alignment and are re-read by the
+ * backtrace, so this is the dominant per-query buffer. Matches the CPU
+ * BeyondScope's initial 4096. PROVISIONAL, like every capacity here.
+ */
+constexpr int kBeyondScopeCapacity = 4096;
+
+/**
+ * @brief Ring length (number of scores) the flattened Scope is built to hold.
+ *
+ * The CPU Scope sizes its ring at runtime from the penalties
+ * (max(gapo+gape, mism)+1, i.e. 5 with the default penalties). Device arrays
+ * need a compile-time bound; this is it. PROVISIONAL: guarded, and overflow sets
+ * capacity_exceeded rather than indexing out of range.
+ */
+constexpr int kMaxScores = 8;
+
+/**
+ * @brief Cells each per-score Scope wavefront (I and D) is built to hold, and
+ * range entries each per-score position vector (M/I/D) is built to hold.
+ *
+ * The Scope wavefronts are the ones kProvisionalWavefrontCapacity was written
+ * about; the position vectors hold one range per active vertex. Both PROVISIONAL.
+ * Kept equal to kProvisionalWavefrontCapacity (defined in theseus_aligner_impl.h,
+ * which cannot be included here without a cycle).
+ */
+constexpr int kScopeWavefrontCapacity = 1024;
+constexpr int kScopePosCapacity = 1024;
+
+/**
+ * @brief A half-open range into a wavefront, one per active vertex. Mirrors the
+ * POD Scope::range so the flattened Scope needs no dependency on the Scope class.
+ */
+struct Range {
+    int64_t start;
+    int64_t end;
+};
+
+/**
+ * @brief Fixed bounds for the flattened VerticesData. All PROVISIONAL and
+ * guarded: kMaxVertices bounds the graph size (the vertex->active-index map),
+ * kMaxActiveVertices the vertices touched in one alignment, kMaxInvalidSegments
+ * the invalid-diagonal segments held per matrix per vertex, kMaxJumpsPerScore
+ * the jump positions recorded per score per vertex.
+ */
+constexpr int kMaxVertices = 2048;
+constexpr int kMaxActiveVertices = 256;
+constexpr int kMaxInvalidSegments = 64;
+constexpr int kMaxJumpsPerScore = 32;
+constexpr int kMaxIJumpStack = 256;
+
+/**
+ * @brief One run of invalid diagonals for a vertex/matrix, with the countdowns
+ * that grow it. Mirrors VerticesData::InvalidData (Segment + rem_up/rem_down)
+ * flattened into one POD.
+ */
+struct InvalidSeg {
+    int32_t start_d;   // inclusive
+    int32_t end_d;     // inclusive
+    int32_t rem_up;    // scores left before the segment grows one diagonal up
+    int32_t rem_down;  // scores left before it grows one diagonal down
+};
+
+struct QueryState {
+    // ---- ScratchPad -------------------------------------------------------
+    // A wavefront indexed by diagonal over [sp_min_diag, sp_max_diag], plus the
+    // list of diagonals touched since the last reset (the sparse view the
+    // densify step iterates). sp_wf[diag - sp_min_diag] is the cell of `diag`.
+    // A cell is "inactive" when its offset is -1, which is both the resting
+    // value and how access_alloc detects a first touch.
+    Cell    sp_wf[kScratchpadSpan];
+    Cell    sp_overflow_cell;
+    int32_t sp_diags[kScratchpadSpan];
+    int32_t sp_min_diag;
+    int32_t sp_max_diag;
+    int32_t sp_ndiags;
+
+    // ---- BeyondScope ------------------------------------------------------
+    // The append-only wavefronts kept until backtrace: the M densify output and
+    // the M/I jump cells. Each is a flat array plus a running size. Being fixed
+    // arrays, references into them never move (the CPU CellVector could realloc
+    // mid-extend), so this is byte-identical and strictly safer as long as the
+    // capacity holds. The unused I2-jumps wavefront is omitted.
+    Cell    bs_m_wf[kBeyondScopeCapacity];
+    Cell    bs_m_jumps_wf[kBeyondScopeCapacity];
+    Cell    bs_i_jumps_wf[kBeyondScopeCapacity];
+    int32_t bs_m_wf_size;
+    int32_t bs_m_jumps_wf_size;
+    int32_t bs_i_jumps_wf_size;
+
+    // ---- Scope (ring of nscores wavefronts) -------------------------------
+    // Indexed by score % sc_nscores. Each slot holds the per-score I and D dense
+    // wavefronts (the M dense wavefront lives in BeyondScope) and the M/I/D
+    // position ranges, one range per active vertex. sc_peak_wf is the largest
+    // per-score wavefront seen, kept to size a real bound from.
+    Cell    sc_i_wf[kMaxScores][kScopeWavefrontCapacity];
+    Cell    sc_d_wf[kMaxScores][kScopeWavefrontCapacity];
+    int32_t sc_i_wf_size[kMaxScores];
+    int32_t sc_d_wf_size[kMaxScores];
+    Range   sc_m_pos[kMaxScores][kScopePosCapacity];
+    Range   sc_i_pos[kMaxScores][kScopePosCapacity];
+    Range   sc_d_pos[kMaxScores][kScopePosCapacity];
+    int32_t sc_m_pos_size[kMaxScores];
+    int32_t sc_i_pos_size[kMaxScores];
+    int32_t sc_d_pos_size[kMaxScores];
+    int32_t sc_nscores;
+    int32_t sc_peak_wf;
+
+    // ---- VerticesData -----------------------------------------------------
+    // Active vertices are packed into [0, vd_num_active); vd_vertex_to_idx maps a
+    // graph vertex id to its active index (-1 if not active). Per active vertex:
+    // the invalid-diagonal segments of matrices M/I/D, and the jump positions
+    // recorded per score for the M and I jump wavefronts. vd_gapo/vd_gape are the
+    // public penalties VerticesData grows its segments with.
+    int32_t vd_gapo;
+    int32_t vd_gape;
+    int32_t vd_nscores;
+    int32_t vd_num_vertices;
+    int32_t vd_num_active;
+    int32_t vd_vertex_to_idx[kMaxVertices];
+    int32_t vd_vertex_id[kMaxActiveVertices];
+
+    InvalidSeg vd_m_invalid[kMaxActiveVertices][kMaxInvalidSegments];
+    InvalidSeg vd_i_invalid[kMaxActiveVertices][kMaxInvalidSegments];
+    InvalidSeg vd_d_invalid[kMaxActiveVertices][kMaxInvalidSegments];
+    int32_t vd_m_invalid_size[kMaxActiveVertices];
+    int32_t vd_i_invalid_size[kMaxActiveVertices];
+    int32_t vd_d_invalid_size[kMaxActiveVertices];
+
+    int64_t vd_m_jumps_pos[kMaxActiveVertices][kMaxScores][kMaxJumpsPerScore];
+    int64_t vd_i_jumps_pos[kMaxActiveVertices][kMaxScores][kMaxJumpsPerScore];
+    int32_t vd_m_jumps_pos_size[kMaxActiveVertices][kMaxScores];
+    int32_t vd_i_jumps_pos_size[kMaxActiveVertices][kMaxScores];
+
+    // Set true the first time any fixed capacity above is too small. Checked by
+    // the host after an alignment; never silently ignored.
+    bool capacity_exceeded;
+};
+
+/**
+ * @brief Put the ScratchPad window at [min_diag, max_diag] and clear it.
+ *
+ * Mirrors constructing a fresh CPU ScratchPad(min_diag, max_diag): every cell in
+ * the window is set inactive (offset -1) and no diagonal is active. Called once
+ * at construction and again only when the window has to grow, matching when the
+ * CPU code reallocates.
+ */
+THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
+    qs.sp_min_diag = min_diag;
+    qs.sp_max_diag = max_diag;
+    qs.sp_ndiags = 0;
+    qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+
+    const int span = max_diag - min_diag + 1;
+    if (span > kScratchpadSpan) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    for (int i = 0; i < span; ++i) {
+        qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+    }
+}
+
+/**
+ * @brief The scratchpad cell of diagonal @p diag, without marking it active.
+ */
+THESEUS_HD inline Cell &sp_at(QueryState &qs, int diag) {
+    const int idx = diag - qs.sp_min_diag;
+    if (idx < 0 || idx >= kScratchpadSpan) {
+        qs.capacity_exceeded = true;
+        qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+        return qs.sp_overflow_cell;
+    }
+    return qs.sp_wf[idx];
+}
+
+/**
+ * @brief The scratchpad cell of @p diag, adding it to the active list on first
+ * touch. Mirrors ScratchPad::access_alloc: the diagonal is appended to the list
+ * only when it was still inactive (offset -1), which dedups by first touch and
+ * preserves first-touch order.
+ */
+THESEUS_HD inline Cell &sp_access_alloc(QueryState &qs, int diag) {
+    const int idx = diag - qs.sp_min_diag;
+    if (idx < 0 || idx >= kScratchpadSpan) {
+        qs.capacity_exceeded = true;
+        qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+        return qs.sp_overflow_cell;
+    }
+    if (qs.sp_wf[idx].offset == -1) {
+        if (qs.sp_ndiags >= kScratchpadSpan) {
+            qs.capacity_exceeded = true;
+            qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+            return qs.sp_overflow_cell;
+        }
+        qs.sp_diags[qs.sp_ndiags] = diag;
+        ++qs.sp_ndiags;
+    }
+    return qs.sp_wf[idx];
+}
+
+/**
+ * @brief Reset the scratchpad: set every active diagonal back to inactive and
+ * empty the active list. Only touched cells are cleared, matching the CPU code.
+ */
+THESEUS_HD inline void sp_reset(QueryState &qs) {
+    for (int i = 0; i < qs.sp_ndiags; ++i) {
+        qs.sp_wf[qs.sp_diags[i] - qs.sp_min_diag].offset = -1;
+    }
+    qs.sp_ndiags = 0;
+}
+
+/**
+ * @brief Empty every BeyondScope wavefront for a new alignment.
+ */
+THESEUS_HD inline void bs_new_alignment(QueryState &qs) {
+    qs.bs_m_wf_size = 0;
+    qs.bs_m_jumps_wf_size = 0;
+    qs.bs_i_jumps_wf_size = 0;
+}
+
+/**
+ * @brief Append @p c to a BeyondScope wavefront and return the index it landed
+ * at (mirrors capturing size() before a push_back).
+ *
+ * On overflow the cell is dropped and capacity_exceeded is set: the alignment is
+ * already invalid, but nothing is written past the end of the array. The clamped
+ * index keeps callers in bounds until the host sees the flag.
+ */
+THESEUS_HD inline int32_t bs_push_back(QueryState &qs, Cell *wf, int32_t &size,
+                            const Cell &c) {
+    if (size >= kBeyondScopeCapacity) {
+        qs.capacity_exceeded = true;
+        return (size > 0) ? size - 1 : 0;
+    }
+    const int32_t pos = size;
+    wf[pos] = c;
+    size = pos + 1;
+    return pos;
+}
+
+// ---- Scope ----------------------------------------------------------------
+
+/**
+ * @brief Set the Scope ring length and clear it. Mirrors constructing a Scope
+ * with @p nscores slots. Over-long rings are clamped and flagged rather than
+ * indexed out of range.
+ */
+THESEUS_HD inline void sc_init(QueryState &qs, int nscores) {
+    if (nscores > kMaxScores) {
+        qs.capacity_exceeded = true;
+        nscores = kMaxScores;
+    }
+    qs.sc_nscores = nscores;
+    qs.sc_peak_wf = 0;
+    for (int s = 0; s < kMaxScores; ++s) {
+        qs.sc_i_wf_size[s] = 0;
+        qs.sc_d_wf_size[s] = 0;
+        qs.sc_m_pos_size[s] = 0;
+        qs.sc_i_pos_size[s] = 0;
+        qs.sc_d_pos_size[s] = 0;
+    }
+}
+
+/**
+ * @brief Empty every ring slot for a new alignment.
+ */
+THESEUS_HD inline void sc_new_alignment(QueryState &qs) {
+    for (int s = 0; s < qs.sc_nscores; ++s) {
+        qs.sc_i_wf_size[s] = 0;
+        qs.sc_d_wf_size[s] = 0;
+        qs.sc_m_pos_size[s] = 0;
+        qs.sc_i_pos_size[s] = 0;
+        qs.sc_d_pos_size[s] = 0;
+    }
+}
+
+/**
+ * @brief Reset the ring slot of @p score, whose old contents are no longer in
+ * scope. Mirrors Scope::new_score.
+ */
+THESEUS_HD inline void sc_new_score(QueryState &qs, int score) {
+    const int s = score % qs.sc_nscores;
+    qs.sc_i_wf_size[s] = 0;
+    qs.sc_d_wf_size[s] = 0;
+    qs.sc_m_pos_size[s] = 0;
+    qs.sc_i_pos_size[s] = 0;
+    qs.sc_d_pos_size[s] = 0;
+}
+
+// Ring-slot views, named like the Scope accessors so call sites read the same.
+THESEUS_HD inline Cell *sc_i_wf(QueryState &qs, int score) { return qs.sc_i_wf[score % qs.sc_nscores]; }
+THESEUS_HD inline Cell *sc_d_wf(QueryState &qs, int score) { return qs.sc_d_wf[score % qs.sc_nscores]; }
+THESEUS_HD inline int32_t &sc_i_wf_size(QueryState &qs, int score) { return qs.sc_i_wf_size[score % qs.sc_nscores]; }
+THESEUS_HD inline int32_t &sc_d_wf_size(QueryState &qs, int score) { return qs.sc_d_wf_size[score % qs.sc_nscores]; }
+THESEUS_HD inline Range *sc_m_pos(QueryState &qs, int score) { return qs.sc_m_pos[score % qs.sc_nscores]; }
+THESEUS_HD inline Range *sc_i_pos(QueryState &qs, int score) { return qs.sc_i_pos[score % qs.sc_nscores]; }
+THESEUS_HD inline Range *sc_d_pos(QueryState &qs, int score) { return qs.sc_d_pos[score % qs.sc_nscores]; }
+THESEUS_HD inline int32_t &sc_m_pos_size(QueryState &qs, int score) { return qs.sc_m_pos_size[score % qs.sc_nscores]; }
+THESEUS_HD inline int32_t &sc_i_pos_size(QueryState &qs, int score) { return qs.sc_i_pos_size[score % qs.sc_nscores]; }
+THESEUS_HD inline int32_t &sc_d_pos_size(QueryState &qs, int score) { return qs.sc_d_pos_size[score % qs.sc_nscores]; }
+
+/**
+ * @brief Append a cell to a Scope wavefront, tracking the peak size. On overflow
+ * the cell is dropped and capacity_exceeded is set (nothing written past the
+ * end); the alignment is already invalid by then.
+ */
+THESEUS_HD inline void sc_wf_push(QueryState &qs, Cell *wf, int32_t &size, const Cell &c) {
+    if (size >= kScopeWavefrontCapacity) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    wf[size] = c;
+    ++size;
+    if (size > qs.sc_peak_wf) {
+        qs.sc_peak_wf = size;
+    }
+}
+
+/**
+ * @brief Append a range to a Scope position vector, guarding capacity.
+ */
+THESEUS_HD inline void sc_pos_push(QueryState &qs, Range *pos, int32_t &size, const Range &r) {
+    if (size >= kScopePosCapacity) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    pos[size] = r;
+    ++size;
+}
+
+// ---- VerticesData ---------------------------------------------------------
+
+THESEUS_HD inline int32_t vd_min(int32_t a, int32_t b) { return a < b ? a : b; }
+THESEUS_HD inline int32_t vd_max(int32_t a, int32_t b) { return a > b ? a : b; }
+
+/**
+ * @brief Set the penalties, ring length and graph size the vertices data works
+ * with, and empty it. @p num_vertices is the domain of the vertex->index map.
+ */
+THESEUS_HD inline void vd_init(QueryState &qs, int gapo, int gape, int nscores,
+                    int num_vertices) {
+    qs.vd_gapo = gapo;
+    qs.vd_gape = gape;
+    qs.vd_nscores = nscores;
+    qs.vd_num_vertices = num_vertices;
+    qs.vd_num_active = 0;
+    if (num_vertices > kMaxVertices) {
+        qs.capacity_exceeded = true;
+    }
+    int n = num_vertices;
+    if (n > kMaxVertices) {
+        n = kMaxVertices;
+    }
+    for (int i = 0; i < n; ++i) {
+        qs.vd_vertex_to_idx[i] = -1;
+    }
+}
+
+/**
+ * @brief Drop all active vertices and mark every graph vertex inactive.
+ */
+THESEUS_HD inline void vd_new_alignment(QueryState &qs) {
+    qs.vd_num_active = 0;
+    int n = qs.vd_num_vertices;
+    if (n > kMaxVertices) {
+        n = kMaxVertices;
+    }
+    for (int i = 0; i < n; ++i) {
+        qs.vd_vertex_to_idx[i] = -1;
+    }
+}
+
+THESEUS_HD inline int vd_get_pos(const QueryState &qs, int score) { return score % qs.vd_nscores; }
+THESEUS_HD inline int vd_get_id(const QueryState &qs, int vtx) { return qs.vd_vertex_to_idx[vtx]; }
+THESEUS_HD inline int vd_get_vertex_id(const QueryState &qs, int idx) { return qs.vd_vertex_id[idx]; }
+THESEUS_HD inline int vd_num_active_vertices(const QueryState &qs) { return qs.vd_num_active; }
+
+/**
+ * @brief Add @p vtx to the active set if it is not already there. A fresh active
+ * vertex has empty invalid-segment and jump lists.
+ */
+THESEUS_HD inline void vd_activate_vertex(QueryState &qs, int vtx) {
+    if (vtx >= kMaxVertices) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    if (qs.vd_vertex_to_idx[vtx] != -1) {
+        return;
+    }
+    const int idx = qs.vd_num_active;
+    if (idx >= kMaxActiveVertices) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    qs.vd_vertex_id[idx] = vtx;
+    qs.vd_m_invalid_size[idx] = 0;
+    qs.vd_i_invalid_size[idx] = 0;
+    qs.vd_d_invalid_size[idx] = 0;
+    for (int s = 0; s < qs.vd_nscores; ++s) {
+        qs.vd_m_jumps_pos_size[idx][s] = 0;
+        qs.vd_i_jumps_pos_size[idx][s] = 0;
+    }
+    qs.vd_vertex_to_idx[vtx] = idx;
+    qs.vd_num_active = idx + 1;
+}
+
+/**
+ * @brief Clear the jump positions of every active vertex at @p score's ring slot.
+ */
+THESEUS_HD inline void vd_new_score(QueryState &qs, int score) {
+    const int pos = score % qs.vd_nscores;
+    for (int a = 0; a < qs.vd_num_active; ++a) {
+        qs.vd_m_jumps_pos_size[a][pos] = 0;
+        qs.vd_i_jumps_pos_size[a][pos] = 0;
+    }
+}
+
+/**
+ * @brief Age every segment of one list by one score, growing it when a countdown
+ * reaches zero. Mirrors VerticesData::expand_invalid_vector.
+ */
+THESEUS_HD inline void vd_expand_vec(InvalidSeg *v, int size, int def_up, int def_down) {
+    for (int l = 0; l < size; ++l) {
+        v[l].rem_down -= 1;
+        v[l].rem_up -= 1;
+        if (v[l].rem_up == 0) {
+            v[l].rem_up = def_up;
+            v[l].end_d += 1;
+        }
+        if (v[l].rem_down == 0) {
+            v[l].rem_down = def_down;
+            v[l].start_d -= 1;
+        }
+    }
+}
+
+THESEUS_HD inline void vd_expand(QueryState &qs) {
+    const int g = qs.vd_gape;
+    for (int a = 0; a < qs.vd_num_active; ++a) {
+        vd_expand_vec(qs.vd_m_invalid[a], qs.vd_m_invalid_size[a], g, g);
+        vd_expand_vec(qs.vd_i_invalid[a], qs.vd_i_invalid_size[a], g, g);
+        vd_expand_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
+    }
+}
+
+/**
+ * @brief Sort one segment list by start diagonal and merge overlapping runs.
+ * Mirrors VerticesData::compact_invalid_vector; the std::sort is replaced by an
+ * insertion sort (segments per vertex are few) and the merge arithmetic, order
+ * included, is kept verbatim. Returns the new size.
+ */
+THESEUS_HD inline int vd_compact_vec(InvalidSeg *v, int size, int def_up, int def_down) {
+    if (size == 0) {
+        return 0;
+    }
+
+    // Insertion sort by start_d (ascending), stable.
+    for (int i = 1; i < size; ++i) {
+        InvalidSeg key = v[i];
+        int j = i - 1;
+        while (j >= 0 && v[j].start_d > key.start_d) {
+            v[j + 1] = v[j];
+            --j;
+        }
+        v[j + 1] = key;
+    }
+
+    int k = 0;
+    for (int l = 1; l < size; ++l) {
+        if (v[k].end_d + 1 >= v[l].start_d) {
+            v[k].end_d = vd_max(v[l].end_d, v[k].end_d);
+
+            v[k].rem_down = vd_min(v[k].rem_down,
+                                   v[l].rem_down +
+                                       (v[l].start_d - v[k].start_d) * def_down);
+
+            if (v[l].end_d > v[k].end_d) {
+                v[k].rem_up = vd_min(v[l].rem_up,
+                                     v[k].rem_up +
+                                         (v[l].end_d - v[k].end_d) * def_up);
+            } else {
+                v[k].rem_up = vd_min(v[k].rem_up,
+                                     v[l].rem_up +
+                                         (v[k].end_d - v[l].end_d) * def_up);
+            }
+        } else {
+            k += 1;
+            v[k] = v[l];
+        }
+    }
+    return k + 1;
+}
+
+THESEUS_HD inline void vd_compact(QueryState &qs) {
+    const int g = qs.vd_gape;
+    for (int a = 0; a < qs.vd_num_active; ++a) {
+        qs.vd_m_invalid_size[a] = vd_compact_vec(qs.vd_m_invalid[a], qs.vd_m_invalid_size[a], g, g);
+        qs.vd_i_invalid_size[a] = vd_compact_vec(qs.vd_i_invalid[a], qs.vd_i_invalid_size[a], g, g);
+        qs.vd_d_invalid_size[a] = vd_compact_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
+    }
+}
+
+THESEUS_HD inline void vd_invalid_push(QueryState &qs, InvalidSeg *v, int32_t &size,
+                            const InvalidSeg &s) {
+    if (size >= kMaxInvalidSegments) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    v[size] = s;
+    ++size;
+}
+
+/**
+ * @brief Record the invalid runs created by an I-jump on active vertex @p idx.
+ * Mirrors VerticesData::invalidate_i_jump.
+ */
+THESEUS_HD inline void vd_invalidate_i_jump(QueryState &qs, int idx, int diag) {
+    const int gapo = qs.vd_gapo, gape = qs.vd_gape;
+    InvalidSeg s;
+
+    s.rem_down = gapo + gape;
+    s.rem_up = gape;
+    s.start_d = diag;
+    s.end_d = diag;
+    vd_invalid_push(qs, qs.vd_m_invalid[idx], qs.vd_m_invalid_size[idx], s);
+
+    s.rem_down = 2 * gapo + 3 * gape;
+    s.rem_up = gape;
+    s.start_d = diag;
+    s.end_d = diag;
+    vd_invalid_push(qs, qs.vd_i_invalid[idx], qs.vd_i_invalid_size[idx], s);
+
+    s.rem_down = gapo + gape;
+    s.rem_up = gapo + 2 * gape;
+    s.start_d = diag;
+    s.end_d = diag - 1;
+    vd_invalid_push(qs, qs.vd_d_invalid[idx], qs.vd_d_invalid_size[idx], s);
+}
+
+/**
+ * @brief Record the invalid runs created by an M-jump on active vertex @p idx.
+ * Mirrors VerticesData::invalidate_m_jump.
+ */
+THESEUS_HD inline void vd_invalidate_m_jump(QueryState &qs, int idx, int diag) {
+    const int gapo = qs.vd_gapo, gape = qs.vd_gape;
+    InvalidSeg s;
+
+    s.rem_down = gapo + gape;
+    s.rem_up = gapo + gape;
+    s.start_d = diag;
+    s.end_d = diag;
+    vd_invalid_push(qs, qs.vd_m_invalid[idx], qs.vd_m_invalid_size[idx], s);
+
+    s.rem_down = 2 * (gapo + gape);
+    s.rem_up = gapo + gape;
+    s.start_d = diag + 1;
+    s.end_d = diag;
+    vd_invalid_push(qs, qs.vd_i_invalid[idx], qs.vd_i_invalid_size[idx], s);
+
+    s.rem_down = gapo + gape;
+    s.rem_up = 2 * (gapo + gape);
+    s.start_d = diag;
+    s.end_d = diag - 1;
+    vd_invalid_push(qs, qs.vd_d_invalid[idx], qs.vd_d_invalid_size[idx], s);
+}
+
+/**
+ * @brief Whether @p diag is outside every invalid run of the given matrix for
+ * vertex @p vtx. Mirrors VerticesData::valid_diagonal.
+ */
+THESEUS_HD inline bool vd_valid_diagonal(const QueryState &qs, Cell::Matrix matrix, int vtx,
+                              int diag) {
+    const int idx = qs.vd_vertex_to_idx[vtx];
+    const InvalidSeg *v;
+    int size;
+    if (matrix == Cell::Matrix::M) {
+        v = qs.vd_m_invalid[idx];
+        size = qs.vd_m_invalid_size[idx];
+    } else if (matrix == Cell::Matrix::I) {
+        v = qs.vd_i_invalid[idx];
+        size = qs.vd_i_invalid_size[idx];
+    } else {
+        v = qs.vd_d_invalid[idx];
+        size = qs.vd_d_invalid_size[idx];
+    }
+    for (int l = 0; l < size; ++l) {
+        if (v[l].start_d <= diag && diag <= v[l].end_d) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Jump-position lists of a vertex at a score's ring slot, and their sizes.
+THESEUS_HD inline int64_t *vd_m_jumps(QueryState &qs, int vtx, int pos) { return qs.vd_m_jumps_pos[qs.vd_vertex_to_idx[vtx]][pos]; }
+THESEUS_HD inline int64_t *vd_i_jumps(QueryState &qs, int vtx, int pos) { return qs.vd_i_jumps_pos[qs.vd_vertex_to_idx[vtx]][pos]; }
+THESEUS_HD inline int32_t &vd_m_jumps_size(QueryState &qs, int vtx, int pos) { return qs.vd_m_jumps_pos_size[qs.vd_vertex_to_idx[vtx]][pos]; }
+THESEUS_HD inline int32_t &vd_i_jumps_size(QueryState &qs, int vtx, int pos) { return qs.vd_i_jumps_pos_size[qs.vd_vertex_to_idx[vtx]][pos]; }
+
+THESEUS_HD inline void vd_jumps_push(QueryState &qs, int64_t *arr, int32_t &size, int64_t val) {
+    if (size >= kMaxJumpsPerScore) {
+        qs.capacity_exceeded = true;
+        return;
+    }
+    arr[size] = val;
+    ++size;
+}
+
+}  // namespace theseus

@@ -38,20 +38,113 @@
 #include "theseus/penalties.h"
 
 #include "graph.h"
-#include "beyond_scope.h"
 #include "cell.h"
-#include "scope.h"
 #include "scratchpad.h"
+#include "query_state.h"
 #include "vertices_data.h"
 #include "wavefront.h"
 #include "internal_penalties.h"
+#include "gpu/graph_csr.h"
 
 namespace theseus {
+
+/**
+ * @brief Cells each wavefront is preallocated to hold.
+ *
+ * PROVISIONAL. Device code cannot reallocate, so every wavefront the GPU port
+ * touches needs an upper bound fixed before the kernel launches. This number is
+ * not that bound: it is the value the CPU has always used, and nothing has ever
+ * tested it. Measured on the sample data (5 queries of 11-13 bases over an
+ * 8-vertex graph) the wavefronts peak at 4 cells, so the value below is 256x
+ * larger than that data can distinguish. Sizing a real bound from this dataset
+ * would be meaningless.
+ *
+ * A real bound has to be derived from query length, vertex length and vertex
+ * count, and measured on a realistic graph with real reads. Until then
+ * Scope::capacity_exceeded() reports when the algorithm outgrows this value, so
+ * that the day it happens is not the day a kernel silently reads past the end of
+ * a buffer.
+ *
+ * The same constraint applies to BeyondScope, VerticesData and ScratchPad, which
+ * also grow on demand and are not covered yet.
+ */
+constexpr int kProvisionalWavefrontCapacity = 1024;
 
 class TheseusAlignerImpl {
 public:
     TheseusAlignerImpl(const Penalties &penalties,
                        Graph &&graph);
+
+    /**
+     * @brief Releases the graph held in device memory, if any.
+     */
+    ~TheseusAlignerImpl();
+
+    /**
+     * @brief The CSR mirror of the graph, built once at construction.
+     */
+    const gpu::GraphCsr &graph_csr() const { return *_graph_csr; }
+
+    /**
+     * @brief Whether the alignments run so far outgrew the fixed wavefront
+     * capacity, see kProvisionalWavefrontCapacity.
+     */
+    bool wavefront_capacity_exceeded() const { return _qs->capacity_exceeded; }
+
+    /**
+     * @brief Whether any fixed-capacity buffer in the flattened QueryState (the
+     * ScratchPad span, the BeyondScope wavefronts, the Scope ring, ...) was too
+     * small for some alignment. Same meaning as wavefront_capacity_exceeded():
+     * harmless on the CPU, fatal for a device buffer, so it must never be silent.
+     */
+    bool query_state_capacity_exceeded() const { return _qs->capacity_exceeded; }
+
+    /**
+     * @brief Largest per-score wavefront size reached so far, to size a real
+     * bound from.
+     */
+    std::ptrdiff_t peak_wavefront_capacity() const { return _qs->sc_peak_wf; }
+
+    /**
+     * @brief The graph in device memory, uploaded on first use.
+     *
+     * Uploading is deferred rather than done at construction so that CPU-only
+     * runs never touch the device. The upload happens once per aligner, not
+     * once per batch: the graph is read-only and shared by every query.
+     *
+     * @return Handle owned by this object, or nullptr if no device is usable
+     */
+    gpu::DeviceGraph *device_graph();
+
+    /**
+     * @brief Host-side lookup used before launching a GPU batch. Kernels receive
+     * numeric vertex ids; graph names stay on the host for parsing and output.
+     */
+    int32_t graph_vertex_id(const std::string &name);
+
+    /**
+     * @brief POD copy of internal penalties for the CUDA backend.
+     */
+    gpu::AlignScoring gpu_scoring() const {
+        return gpu::AlignScoring{_internal_penalties.mism(), _internal_penalties.gapo(),
+                                 _internal_penalties.gape(), _qs->sc_nscores};
+    }
+
+    /**
+     * @brief Result signature of the most recent CPU alignment, shaped like the
+     * CUDA kernel output so the host can compare both paths before trusting the
+     * device result for backtrace/output.
+     */
+    gpu::AlignResult last_align_result() const;
+
+    /**
+     * @brief Reconstruct an Alignment by running the existing host backtrace on
+     * a QueryState copied back from the CUDA kernel.
+     */
+    Alignment alignment_from_gpu_result(std::string_view seq,
+                                        int start_offset,
+                                        const QueryState &state,
+                                        const gpu::AlignResult &result);
 
     /**
      * @brief Main alignment function. Aligns the given sequence to the graph
@@ -122,10 +215,10 @@ private:
      * @param new_score_diff
      * @param prev_matrix
      */
-    void sparsify_M_data(Cell::CellVector &dense_wf,
+    void sparsify_M_data(Cell *dense_wf,
                          int offset_increase,
                          int shift_factor,
-                         Scope::range cells_range,
+                         Range cells_range,
                          int m,
                          int upper_bound);
 
@@ -145,8 +238,9 @@ private:
      * @param new_score_diff
      * @param prev_matrix
      */
-    void sparsify_jumps_data(Cell::CellVector &dense_wf,
-                             std::vector<Cell::pos_t> &jumps_positions,
+    void sparsify_jumps_data(Cell *dense_wf,
+                             Cell::pos_t *jumps_positions,
+                             int jumps_size,
                              int offset_increase,
                              int shift_factor,
                              int m,
@@ -169,10 +263,10 @@ private:
      * @param new_score_diff
      * @param prev_matrix
      */
-    void sparsify_indel_data(Cell::CellVector &dense_wf,
+    void sparsify_indel_data(Cell *dense_wf,
                              int offset_increase,
                              int shift_factor,
-                             Scope::range cells_range,
+                             Range cells_range,
                              int m,
                              int upper_bound);
 
@@ -251,8 +345,8 @@ private:
      * @param v
      */
     void check_and_store_jumps(Graph::vertex *curr_v,
-                               Cell::CellVector &curr_wavefront,
-                               Scope::range cell_range);
+                               Cell *curr_wavefront,
+                               Range cell_range);
 
     /**
      * @brief Longest Common Prefix of two sequences.
@@ -348,12 +442,16 @@ private:
     int _start_offset;
     Cell _start_pos;
 
-    std::unique_ptr<ScratchPad> _scratchpad;
-
-    std::unique_ptr<Scope> _scope;
-    std::unique_ptr<BeyondScope> _beyond_scope;
+    // Per-query working set, being migrated to flat POD arrays one structure at
+    // a time (see query_state.h). Heap-held because it is large. Currently holds
+    // the flattened ScratchPad.
+    std::unique_ptr<QueryState> _qs;
 
     std::unique_ptr<VerticesData> _vertices_data;
+
+    std::unique_ptr<gpu::GraphCsr> _graph_csr;
+    gpu::DeviceGraph *_device_graph = nullptr;
+    bool _device_graph_attempted = false;   // Guards against retrying a failed upload
 
     std::string_view _seq;
 

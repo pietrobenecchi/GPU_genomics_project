@@ -29,6 +29,7 @@
 #pragma once
 
 #include "cell.h"
+#include <algorithm>
 #include <vector>
 
 /**
@@ -60,16 +61,50 @@ public:
     /**
      * @brief Construct a new Scope object
      *
-     * @param nscores Number of scores in the scope
+     * @param nscores  Number of scores in the scope
+     * @param capacity Cells each wavefront is built to hold, see capacity_exceeded()
      */
-    Scope(int nscores) {
+    Scope(int nscores, int capacity) : _initial_capacity(capacity) {
         _squeue.realloc(nscores);
 
         for (int i = 0; i < nscores; i++) {
-            constexpr int init_capacity = 1024;
-            ScoreData sd(init_capacity);
+            ScoreData sd(capacity);
             _squeue.push_back(std::move(sd));
         }
+    }
+
+    /**
+     * @brief Whether any wavefront has outgrown the capacity it was built with.
+     *
+     * On the host this is harmless, Vector simply reallocates. It matters for the
+     * GPU port: device code cannot grow a buffer, so the capacity handed to the
+     * constructor must be a true upper bound. A true here means that bound is
+     * wrong and a kernel would run past the end of its wavefront.
+     *
+     * Kept as an observation rather than an error because the CPU path stays
+     * correct either way, and no device buffer exists yet.
+     */
+    bool capacity_exceeded() const {
+        for (int i = 0; i < _squeue.size(); ++i) {
+            if (_squeue[i].capacity() > _initial_capacity) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * @brief Largest capacity any wavefront has grown to.
+     *
+     * Equals the constructor's capacity until something outgrows it, so it doubles
+     * as the high-water mark to size a real bound from.
+     */
+    std::ptrdiff_t peak_capacity() const {
+        std::ptrdiff_t peak = _initial_capacity;
+        for (int i = 0; i < _squeue.size(); ++i) {
+            peak = std::max(peak, _squeue[i].capacity());
+        }
+        return peak;
     }
 
     /**
@@ -249,9 +284,21 @@ private:
             _d_pos.resize(new_size);
             _d2_pos.resize(new_size);
         }
+
+        /**
+         * @brief Largest capacity across every buffer of this score.
+         */
+        std::ptrdiff_t capacity() const {
+            return std::max({_i_wf.capacity(), _d_wf.capacity(),
+                             _i2_wf.capacity(), _d2_wf.capacity(),
+                             _m_pos.capacity(), _i_pos.capacity(),
+                             _i2_pos.capacity(), _d_pos.capacity(),
+                             _d2_pos.capacity()});
+        }
     };
 
     Vector<ScoreData> _squeue;
+    std::ptrdiff_t _initial_capacity;
 };
 
 } // namespace theseus

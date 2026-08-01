@@ -28,11 +28,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 #include <typeinfo>
 
+#ifndef __CUDACC__
 #include "vector.h"
+#endif
 
 /**
  * Defines the Cell structure used in the Theseus alignment algorithm.
@@ -60,7 +63,9 @@ constexpr ptrdiff_t realloc_wavefront_policy(std::ptrdiff_t capacity,
 // WARNING: We want Cell to be a simple struct so it is standard layout and
 // trivial. This way, resizes of Vector<Cell> are free.
 struct Cell {
+#ifndef __CUDACC__
     using CellVector = Vector<Cell, true>;
+#endif
 
     using vertex_t = int32_t; // TODO: This should be here?
     using idx2d_t = int32_t;

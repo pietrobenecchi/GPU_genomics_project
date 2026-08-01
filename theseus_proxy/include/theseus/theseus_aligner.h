@@ -30,6 +30,8 @@
 
 #include <memory>
 #include <istream>
+#include <string>
+#include <vector>
 
 #include "theseus/penalties.h"
 #include "theseus/alignment.h"
@@ -47,6 +49,26 @@ namespace theseus
 {
 
     class TheseusAlignerImpl; // Forward declaration of the implementation class.
+
+    /**
+     * @brief What the GPU backend actually did with a batch.
+     *
+     * The backend silently falls back to the CPU whenever it cannot do the work,
+     * so callers need a way to tell a real device run from a fallback.
+     */
+    struct GpuBatchReport
+    {
+        bool device_used = false;        // A CUDA kernel ran on this batch
+        bool aligned_on_device = false;  // The alignment itself ran on the device
+        // The wavefronts outgrew their fixed capacity. Harmless on the CPU, which
+        // reallocates, but it means this data cannot run on a device buffer yet.
+        bool wavefront_capacity_exceeded = false;
+        // A fixed-capacity buffer in the flattened QueryState (ScratchPad span,
+        // BeyondScope wavefronts, ...) was too small. Same meaning as
+        // wavefront_capacity_exceeded for those device-shaped buffers.
+        bool query_state_capacity_exceeded = false;
+        std::string message;             // Human readable backend status
+    };
 
     class TheseusAligner
     {
@@ -90,11 +112,10 @@ namespace theseus
                 int start_offset = 0);
 
         /**
-         * GPU alignment entry point stub.
+         * GPU alignment entry point for a single sequence.
          *
-         * This is intentionally placed at the public API boundary so callers can
-         * switch from `align(...)` to `align_gpu(...)` without touching internals.
-         * Current behavior falls back to CPU until a GPU backend is wired in.
+         * A lone sequence does not fill a device, so this always runs on the CPU
+         * and exists only for API compatibility. Use align_batch_gpu instead.
          *
          * @param seq Sequence to be aligned
          * @param start_node Starting node in the graph
@@ -104,6 +125,30 @@ namespace theseus
         Alignment align_gpu(std::string_view seq,
                 std::string &start_node,
                 int start_offset = 0);
+
+        /**
+         * GPU alignment entry point for a batch of sequences.
+         *
+         * This is the shape the device path needs: the whole batch is uploaded
+         * once and one CUDA thread is assigned per query, so the transfer is amortised
+         * across the batch instead of paid per sequence.
+         *
+         * The Version 0 kernel computes one complete serial alignment per CUDA thread.
+         * The host validates kernel results against the CPU and reconstructs the
+         * final GAF-compatible alignment from copied-back device state when the
+         * signatures match. Pass @p report to find out what the backend did.
+         *
+         * @param seqs Sequences to be aligned
+         * @param start_nodes Starting node in the graph, one per sequence
+         * @param start_offsets Starting offset within the starting node, one per sequence
+         * @param report Optional backend status, see GpuBatchReport
+         * @return Alignments, in the same order as @p seqs
+         */
+        std::vector<Alignment> align_batch_gpu(
+                const std::vector<std::string> &seqs,
+                std::vector<std::string> &start_nodes,
+                std::vector<int> &start_offsets,
+                GpuBatchReport *report = nullptr);
 
     private:
         std::unique_ptr<TheseusAlignerImpl> aligner_impl_;

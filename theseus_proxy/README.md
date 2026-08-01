@@ -1,4 +1,4 @@
-# theseus-proxy
+# theseus_proxy
 
 Minimal proxy project focused only on sequence-to-graph alignment.
 
@@ -13,7 +13,7 @@ This folder intentionally excludes:
 
 ## Build
 ```bash
-cd theseus-proxy
+cd theseus_proxy
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
