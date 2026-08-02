@@ -11,8 +11,13 @@ namespace gpu {
 
 const char *last_error() { return ""; }
 
+const TimingReport &last_timing() {
+    static TimingReport timing;
+    return timing;
+}
+
 Status align_batch(const BatchView &, const DeviceGraph *, const int32_t *,
-                   const int32_t *, AlignScoring, AlignResult *, void *, int32_t *) {
+                   const int32_t *, AlignScoring, AlignOptions, AlignResult *, void *, int32_t *) {
     return Status::NotCompiled;
 }
 

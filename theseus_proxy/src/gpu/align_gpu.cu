@@ -21,6 +21,7 @@ namespace gpu {
 namespace {
 
 char g_last_error[256] = {0};
+TimingReport g_last_timing;
 
 void set_error(const char *context, cudaError_t err) {
     std::snprintf(g_last_error, sizeof(g_last_error), "%s: %s", context,
@@ -58,6 +59,54 @@ __global__ void align_kernel(BatchView batch, GraphCsrView graph,
     const int32_t end = batch.offsets[q + 1];
     align_one(states[q], scoring, batch.chars + begin, end - begin, graph,
               start_node_ids[q], start_offsets[q], results[q]);
+}
+
+__global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView graph,
+                                                   const int32_t *start_node_ids,
+                                                   const int32_t *start_offsets,
+                                                   AlignScoring scoring,
+                                                   QueryState *states,
+                                                   AlignResult *results) {
+    const int32_t query_id = blockIdx.x;
+    const int32_t tid = threadIdx.x;
+    if (query_id >= batch.num_seqs) {
+        return;
+    }
+
+    QueryState *state = &states[query_id];
+
+    __shared__ int block_done;
+    __shared__ int block_failed;
+    __shared__ int current_score;
+
+    if (tid == 0) {
+        block_done = 0;
+        block_failed = 0;
+        current_score = 0;
+    }
+
+    unsigned char *state_bytes = reinterpret_cast<unsigned char *>(state);
+    for (size_t i = static_cast<size_t>(tid); i < sizeof(QueryState);
+         i += static_cast<size_t>(blockDim.x)) {
+        state_bytes[i] = 0;
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+        const int32_t begin = batch.offsets[query_id];
+        const int32_t end = batch.offsets[query_id + 1];
+        align_one(*state, scoring, batch.chars + begin, end - begin, graph,
+                  start_node_ids[query_id], start_offsets[query_id],
+                  results[query_id]);
+        current_score = results[query_id].score;
+        block_done = results[query_id].reached_end != 0;
+        block_failed = results[query_id].capacity_exceeded != 0;
+    }
+    __syncthreads();
+
+    (void)block_done;
+    (void)block_failed;
+    (void)current_score;
 }
 
 /**
@@ -194,15 +243,19 @@ struct DeviceGraph {
 
 const char *last_error() { return g_last_error; }
 
+const TimingReport &last_timing() { return g_last_timing; }
+
 Status align_batch(const BatchView &batch,
                    const DeviceGraph *graph,
                    const int32_t *start_node_ids,
                    const int32_t *start_offsets,
                    AlignScoring scoring,
+                   AlignOptions options,
                    AlignResult *out_results,
                    void *out_query_states,
                    int32_t *out_seq_lengths) {
     clear_error();
+    g_last_timing = TimingReport{};
 
     if (batch.num_seqs <= 0) {
         return Status::NotImplemented;
@@ -236,6 +289,15 @@ Status align_batch(const BatchView &batch,
     int32_t *d_lengths = nullptr;
     BatchView device_batch{nullptr, nullptr, 0};
     Status status = Status::Ok;
+    cudaEvent_t ev_start = nullptr;
+    cudaEvent_t ev_h2d = nullptr;
+    cudaEvent_t ev_kernel = nullptr;
+    cudaEvent_t ev_d2h = nullptr;
+    const int32_t threads_per_block =
+        (options.threads_per_block == 64 || options.threads_per_block == 128 ||
+         options.threads_per_block == 256)
+            ? options.threads_per_block
+            : 128;
 
     // Single exit path: every allocation below is released at `cleanup`.
     err = cudaMalloc(&d_chars, chars_bytes);
@@ -281,6 +343,14 @@ Status align_batch(const BatchView &batch,
         goto cleanup;
     }
 
+    cudaEventCreate(&ev_start);
+    cudaEventCreate(&ev_h2d);
+    cudaEventCreate(&ev_kernel);
+    cudaEventCreate(&ev_d2h);
+    if (ev_start != nullptr) {
+        cudaEventRecord(ev_start);
+    }
+
     err = cudaMemcpy(d_chars, batch.chars, chars_bytes, cudaMemcpyHostToDevice);
     if (err != cudaSuccess) {
         set_error("cudaMemcpy(chars H2D)", err);
@@ -318,10 +388,13 @@ Status align_batch(const BatchView &batch,
         goto cleanup;
     }
 
-    constexpr int kThreadsPerBlock = 128;
-    const int blocks = (batch.num_seqs + kThreadsPerBlock - 1) / kThreadsPerBlock;
+    if (ev_h2d != nullptr) {
+        cudaEventRecord(ev_h2d);
+    }
 
-    seq_length_kernel<<<blocks, kThreadsPerBlock>>>(d_offsets, batch.num_seqs, d_lengths);
+    const int blocks = (batch.num_seqs + threads_per_block - 1) / threads_per_block;
+
+    seq_length_kernel<<<blocks, threads_per_block>>>(d_offsets, batch.num_seqs, d_lengths);
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         set_error("seq_length_kernel launch", err);
@@ -330,9 +403,15 @@ Status align_batch(const BatchView &batch,
     }
 
     device_batch = BatchView{d_chars, d_offsets, batch.num_seqs};
-    align_kernel<<<blocks, kThreadsPerBlock>>>(device_batch, graph->view,
-                                               d_start_node_ids, d_start_offsets,
-                                               scoring, d_states, d_results);
+    if (options.config == GpuConfig::Config1) {
+        theseus_align_batch_config1_kernel<<<batch.num_seqs, threads_per_block>>>(
+            device_batch, graph->view, d_start_node_ids, d_start_offsets, scoring,
+            d_states, d_results);
+    } else {
+        align_kernel<<<blocks, threads_per_block>>>(device_batch, graph->view,
+                                                    d_start_node_ids, d_start_offsets,
+                                                    scoring, d_states, d_results);
+    }
     err = cudaGetLastError();
     if (err != cudaSuccess) {
         set_error("align_kernel launch", err);
@@ -344,6 +423,9 @@ Status align_batch(const BatchView &batch,
         set_error("align_kernel synchronize", err);
         status = Status::CudaError;
         goto cleanup;
+    }
+    if (ev_kernel != nullptr) {
+        cudaEventRecord(ev_kernel);
     }
 
     err = cudaMemcpy(out_seq_lengths, d_lengths, lengths_bytes, cudaMemcpyDeviceToHost);
@@ -366,6 +448,16 @@ Status align_batch(const BatchView &batch,
             goto cleanup;
         }
     }
+    if (ev_d2h != nullptr) {
+        cudaEventRecord(ev_d2h);
+        cudaEventSynchronize(ev_d2h);
+    }
+    if (ev_start != nullptr && ev_h2d != nullptr && ev_kernel != nullptr && ev_d2h != nullptr) {
+        cudaEventElapsedTime(&g_last_timing.h2d_ms, ev_start, ev_h2d);
+        cudaEventElapsedTime(&g_last_timing.kernel_ms, ev_h2d, ev_kernel);
+        cudaEventElapsedTime(&g_last_timing.d2h_ms, ev_kernel, ev_d2h);
+        cudaEventElapsedTime(&g_last_timing.end_to_end_ms, ev_start, ev_d2h);
+    }
 
 cleanup:
     cudaFree(d_chars);
@@ -375,6 +467,10 @@ cleanup:
     cudaFree(d_results);
     cudaFree(d_states);
     cudaFree(d_lengths);
+    if (ev_start != nullptr) cudaEventDestroy(ev_start);
+    if (ev_h2d != nullptr) cudaEventDestroy(ev_h2d);
+    if (ev_kernel != nullptr) cudaEventDestroy(ev_kernel);
+    if (ev_d2h != nullptr) cudaEventDestroy(ev_d2h);
     return status;
 }
 

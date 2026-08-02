@@ -67,6 +67,13 @@ namespace theseus
         // BeyondScope wavefronts, ...) was too small. Same meaning as
         // wavefront_capacity_exceeded for those device-shaped buffers.
         bool query_state_capacity_exceeded = false;
+        int gpu_config = 0;
+        int gpu_threads_per_block = 128;
+        float graph_ms = 0.0f;
+        float h2d_ms = 0.0f;
+        float kernel_ms = 0.0f;
+        float d2h_ms = 0.0f;
+        float end_to_end_ms = 0.0f;
         std::string message;             // Human readable backend status
     };
 
@@ -148,7 +155,9 @@ namespace theseus
                 const std::vector<std::string> &seqs,
                 std::vector<std::string> &start_nodes,
                 std::vector<int> &start_offsets,
-                GpuBatchReport *report = nullptr);
+                GpuBatchReport *report = nullptr,
+                int gpu_config = 0,
+                int gpu_threads_per_block = 128);
 
     private:
         std::unique_ptr<TheseusAlignerImpl> aligner_impl_;

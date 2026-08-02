@@ -167,7 +167,9 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     const std::vector<std::string> &seqs,
     std::vector<std::string> &start_nodes,
     std::vector<int> &start_offsets,
-    GpuBatchReport *report) {
+    GpuBatchReport *report,
+    int gpu_config,
+    int gpu_threads_per_block) {
 
     // Flatten into the concatenated layout the device consumes. This is built
     // even though the alignment still happens on the CPU, so that the upload
@@ -196,16 +198,30 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     std::vector<int32_t> device_lengths(seqs.size(), -1);
     std::vector<gpu::AlignResult> device_results(seqs.size());
     std::vector<QueryState> device_states(seqs.size());
+    gpu::AlignOptions options;
+    options.config = (gpu_config == 1) ? gpu::GpuConfig::Config1 : gpu::GpuConfig::Config0;
+    options.threads_per_block = gpu_threads_per_block;
+
     const gpu::Status status = gpu::align_batch(
         view, device_graph, start_node_ids.data(), start_offset_values.data(),
-        aligner_impl_->gpu_scoring(), device_results.data(), device_states.data(),
-        device_lengths.data());
+        aligner_impl_->gpu_scoring(), options, device_results.data(),
+        device_states.data(), device_lengths.data());
 
     if (report != nullptr) {
         report->device_used = (status == gpu::Status::Ok ||
                                status == gpu::Status::NotImplemented);
         report->aligned_on_device = (status == gpu::Status::Ok);
-        report->message = gpu::status_message(status);
+        report->gpu_config = gpu_config;
+        report->gpu_threads_per_block = gpu_threads_per_block;
+        const gpu::TimingReport &timing = gpu::last_timing();
+        report->graph_ms = timing.graph_ms;
+        report->h2d_ms = timing.h2d_ms;
+        report->kernel_ms = timing.kernel_ms;
+        report->d2h_ms = timing.d2h_ms;
+        report->end_to_end_ms = timing.end_to_end_ms;
+        report->message = std::string("config ") + std::to_string(gpu_config) +
+                          "; threads/block " + std::to_string(gpu_threads_per_block) +
+                          "; " + gpu::status_message(status);
 
         const char *error = gpu::last_error();
         if (error != nullptr && error[0] != '\0') {
@@ -252,7 +268,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         }
         use_gpu_backtrace = result_ok;
         report->message += result_ok
-            ? "; naive align kernel result verified against CPU"
+            ? "; align kernel result verified against CPU"
             : describe_align_result_mismatch(mismatch_idx, device_results[mismatch_idx],
                                              cpu_results[mismatch_idx]);
     }
@@ -266,6 +282,10 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         }
         if (report != nullptr) {
             report->message += "; GAF reconstructed from GPU QueryState with host backtrace";
+            report->message += "; timing_ms h2d=" + std::to_string(report->h2d_ms) +
+                               " kernel=" + std::to_string(report->kernel_ms) +
+                               " d2h=" + std::to_string(report->d2h_ms) +
+                               " total=" + std::to_string(report->end_to_end_ms);
         }
     }
 

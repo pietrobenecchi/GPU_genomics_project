@@ -73,6 +73,25 @@ struct AlignScoring {
     int32_t nscores;
 };
 
+enum class GpuConfig : int32_t {
+    Config0 = 0,
+    Config1 = 1,
+};
+
+struct AlignOptions {
+    GpuConfig config = GpuConfig::Config0;
+    int32_t threads_per_block = 128;
+    int32_t collect_counters = 0;
+};
+
+struct TimingReport {
+    float graph_ms = 0.0f;
+    float h2d_ms = 0.0f;
+    float kernel_ms = 0.0f;
+    float d2h_ms = 0.0f;
+    float end_to_end_ms = 0.0f;
+};
+
 /**
  * @brief Opaque handle to the graph as it lives in device memory.
  *
@@ -110,6 +129,8 @@ inline const char *status_message(Status s) {
  */
 const char *last_error();
 
+const TimingReport &last_timing();
+
 /**
  * @brief Align a batch of queries on the device.
  *
@@ -133,6 +154,7 @@ Status align_batch(const BatchView &batch,
                    const int32_t *start_node_ids,
                    const int32_t *start_offsets,
                    AlignScoring scoring,
+                   AlignOptions options,
                    AlignResult *out_results,
                    void *out_query_states,
                    int32_t *out_seq_lengths);

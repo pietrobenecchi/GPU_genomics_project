@@ -22,6 +22,8 @@ struct CmdArgs {
   std::string sequences_file;
   std::string output_file;
   Backend backend = Backend::Cpu;
+  int gpu_config = 0;
+  int gpu_threads = 128;
 };
 
 // Sequences to align, together with where each one starts in the graph.
@@ -42,7 +44,9 @@ void help() {
       << "  -g, --graph_file <file>      Graph file in GFA format (required)\n"
       << "  -s, --sequences_file <file>  FASTA with start metadata (required)\n"
       << "  -f, --output_file <file>     Output GAF path (required)\n"
-      << "  -b, --backend <cpu|gpu>      Alignment backend (default cpu)\n";
+      << "  -b, --backend <cpu|gpu>      Alignment backend (default cpu)\n"
+      << "      --gpu-config <0|1>       GPU configuration (default 0)\n"
+      << "      --gpu-threads <64|128|256> Threads per GPU block (default 128)\n";
 }
 
 CmdArgs parse_args(int argc, char *const *argv) {
@@ -55,6 +59,8 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"sequences_file", required_argument, nullptr, 's'},
       {"output_file", required_argument, nullptr, 'f'},
       {"backend", required_argument, nullptr, 'b'},
+      {"gpu-config", required_argument, nullptr, 1000},
+      {"gpu-threads", required_argument, nullptr, 1001},
       {nullptr, 0, nullptr, 0}};
 
   CmdArgs args;
@@ -96,6 +102,23 @@ CmdArgs parse_args(int argc, char *const *argv) {
         }
         break;
       }
+      case 1000:
+        args.gpu_config = std::stoi(optarg);
+        if (args.gpu_config != 0 && args.gpu_config != 1) {
+          std::cerr << "Invalid --gpu-config: " << args.gpu_config
+                    << " (expected 0 or 1)\n";
+          std::exit(1);
+        }
+        break;
+      case 1001:
+        args.gpu_threads = std::stoi(optarg);
+        if (args.gpu_threads != 64 && args.gpu_threads != 128 &&
+            args.gpu_threads != 256) {
+          std::cerr << "Invalid --gpu-threads: " << args.gpu_threads
+                    << " (expected 64, 128, or 256)\n";
+          std::exit(1);
+        }
+        break;
       default:
         std::cerr << "Invalid option\n";
         std::exit(1);
@@ -180,10 +203,11 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
  * reports is written to stderr rather than assumed.
  */
 void run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
-             std::ostream &out_stream) {
+             std::ostream &out_stream, int gpu_config, int gpu_threads) {
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
-      inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report);
+      inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
+      gpu_config, gpu_threads);
 
   for (size_t i = 0; i < alignments.size(); ++i) {
     aligner.print_alignment_as_gaf(alignments[i], out_stream,
@@ -230,7 +254,7 @@ int main(int argc, char *const *argv) {
   auto start = std::chrono::steady_clock::now();
 
   if (args.backend == Backend::Gpu) {
-    run_gpu(aligner, inputs, output_file);
+    run_gpu(aligner, inputs, output_file, args.gpu_config, args.gpu_threads);
   } else {
     run_cpu(aligner, inputs, output_file);
   }

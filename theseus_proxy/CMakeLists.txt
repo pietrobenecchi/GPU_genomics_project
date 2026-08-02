@@ -73,6 +73,12 @@ if(THESEUS_PROXY_BUILD_APP)
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/apps"
   )
 
+  add_executable(seq2graph_gpu_benchmark apps/seq2graph_gpu_benchmark.cpp)
+  target_link_libraries(seq2graph_gpu_benchmark PRIVATE theseus_proxy)
+  set_target_properties(seq2graph_gpu_benchmark PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/apps"
+  )
+
 
   if(BUILD_TESTING)
     add_test(
