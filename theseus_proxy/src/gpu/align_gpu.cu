@@ -293,6 +293,7 @@ Status align_batch(const BatchView &batch,
     cudaEvent_t ev_h2d = nullptr;
     cudaEvent_t ev_kernel = nullptr;
     cudaEvent_t ev_d2h = nullptr;
+    int blocks = 0;
     const int32_t threads_per_block =
         (options.threads_per_block == 64 || options.threads_per_block == 128 ||
          options.threads_per_block == 256)
@@ -392,7 +393,7 @@ Status align_batch(const BatchView &batch,
         cudaEventRecord(ev_h2d);
     }
 
-    const int blocks = (batch.num_seqs + threads_per_block - 1) / threads_per_block;
+    blocks = (batch.num_seqs + threads_per_block - 1) / threads_per_block;
 
     seq_length_kernel<<<blocks, threads_per_block>>>(d_offsets, batch.num_seqs, d_lengths);
     err = cudaGetLastError();
