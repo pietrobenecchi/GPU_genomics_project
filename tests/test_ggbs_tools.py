@@ -1,0 +1,261 @@
+import contextlib
+import importlib.util
+import io
+import json
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_module(name, relative):
+    spec = importlib.util.spec_from_file_location(name, ROOT / relative)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+converter = load_module("converter", "scripts/ggbs_json_to_theseus_queries.py")
+regression = load_module("regression", "scripts/run_ggbs_gpu_regression.py")
+golden = load_module("golden", "scripts/generate_ggbs_cpu_golden.py")
+
+
+class ConverterTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.gfa = self.root / "graph.gfa"
+        self.gfa.write_text("S\t1\tACGT\nS\t2\tTTAA\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write_json(self, records):
+        path = self.root / "reads.json"
+        path.write_text(json.dumps(records), encoding="utf-8")
+        return path
+
+    def run_convert(self, records, *extra):
+        args = converter.parse_args(
+            [
+                "--json",
+                str(self.write_json(records)),
+                "--graph",
+                str(self.gfa),
+                "--queries",
+                str(self.root / "out.queries"),
+                "--metadata",
+                str(self.root / "out.metadata.json"),
+                "--overwrite",
+                *extra,
+            ]
+        )
+        return converter.convert(args, [])
+
+    def record(self, **updates):
+        base = {
+            "name": "r1",
+            "sequence": "ACGT",
+            "path": {"mapping": [{"position": {"node_id": "1", "offset": "2"}}]},
+            "score": 10,
+            "identity": 1.0,
+        }
+        base.update(updates)
+        return base
+
+    def test_forward_valid(self):
+        metadata = self.run_convert([self.record()])
+        self.assertEqual((self.root / "out.queries").read_text(), ">1 2 +\nACGT\n")
+        self.assertEqual(metadata["queries"][0]["read_id"], "r1")
+
+    def test_reverse_valid(self):
+        rec = self.record(path={"mapping": [{"position": {"node_id": "2", "offset": "1", "is_reverse": True}}]})
+        self.run_convert([rec])
+        self.assertEqual((self.root / "out.queries").read_text(), ">2 1 -\nACGT\n")
+
+    def test_mapping_empty(self):
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([self.record(path={"mapping": []})])
+
+    def test_node_id_missing(self):
+        rec = self.record(path={"mapping": [{"position": {"offset": "0"}}]})
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([rec])
+
+    def test_node_missing_from_gfa(self):
+        rec = self.record(path={"mapping": [{"position": {"node_id": "99", "offset": "0"}}]})
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([rec])
+
+    def test_empty_sequence(self):
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([self.record(sequence="")])
+
+    def test_duplicate_read_id(self):
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([self.record(), self.record()])
+
+    def test_deterministic_subset(self):
+        records = [self.record(name=f"r{i}") for i in range(5)]
+        first = self.run_convert(records, "--limit", "3")["queries"]
+        second = self.run_convert(records, "--limit", "3")["queries"]
+        self.assertEqual(first, second)
+        self.assertEqual([item["read_id"] for item in first], ["r0", "r1", "r2"])
+
+    def test_deterministic_sampled_subset(self):
+        records = [self.record(name=f"r{i}") for i in range(20)]
+        first = self.run_convert(records, "--limit", "5", "--sample-seed", "7")["queries"]
+        second = self.run_convert(records, "--limit", "5", "--sample-seed", "7")["queries"]
+        self.assertEqual([item["read_id"] for item in first], [item["read_id"] for item in second])
+
+    def test_absent_offset_means_zero(self):
+        # vg omits protobuf defaults; the GGBS position CSVs list these reads at 0.
+        rec = self.record(path={"mapping": [{"position": {"node_id": "1"}}]})
+        self.run_convert([rec])
+        self.assertEqual((self.root / "out.queries").read_text(), ">1 0 +\nACGT\n")
+
+    def test_non_integer_offset_is_rejected(self):
+        rec = self.record(path={"mapping": [{"position": {"node_id": "1", "offset": "x"}}]})
+        with self.assertRaises(converter.ConversionError):
+            self.run_convert([rec])
+
+    def test_sequence_is_copied_verbatim(self):
+        seq = "acgtNNryACGT"
+        self.run_convert([self.record(sequence=seq)])
+        self.assertIn(f"\n{seq}\n", (self.root / "out.queries").read_text())
+
+
+class GoldenReferenceTests(unittest.TestCase):
+    """The CPU reference must never be regenerated by accident."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.graph = self.root / "g.gfa"
+        self.graph.write_text("S\t1\tACGT\n", encoding="utf-8")
+        self.queries = self.root / "q.queries"
+        self.queries.write_text(">1 0 +\nACGT\n", encoding="utf-8")
+        self.gaf = self.root / "out.cpu.gaf"
+        self.manifest = self.root / "out.manifest.json"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def args(self, *extra):
+        return golden.parse_args(
+            [
+                "--binary", str(self.root / "never-executed"),
+                "--graph", str(self.graph),
+                "--queries", str(self.queries),
+                "--output-gaf", str(self.gaf),
+                "--manifest", str(self.manifest),
+                *extra,
+            ]
+        )
+
+    def test_existing_golden_is_protected(self):
+        self.gaf.write_text("ORIGINAL\n", encoding="utf-8")
+        with self.assertRaises(RuntimeError) as ctx:
+            golden.run(self.args())
+        self.assertIn("refusing to overwrite", str(ctx.exception))
+        self.assertEqual(self.gaf.read_text(encoding="utf-8"), "ORIGINAL\n")
+
+    def test_existing_manifest_is_protected(self):
+        self.manifest.write_text("{}\n", encoding="utf-8")
+        with self.assertRaises(RuntimeError) as ctx:
+            golden.run(self.args())
+        self.assertIn("refusing to overwrite", str(ctx.exception))
+
+    def test_backend_flag_is_passed_by_default(self):
+        command = golden.build_command(self.args())
+        self.assertIn("--backend", command)
+        self.assertEqual(command[command.index("--backend") + 1], "cpu")
+
+    def test_backend_flag_can_be_omitted_for_the_oracle(self):
+        command = golden.build_command(self.args("--no-backend-flag"))
+        self.assertNotIn("--backend", command)
+        # The rest of the invocation is unchanged.
+        for flag in ("-g", "-s", "-f"):
+            self.assertIn(flag, command)
+
+    def test_confirm_regeneration_clears_the_guard(self):
+        self.gaf.write_text("ORIGINAL\n", encoding="utf-8")
+        # Past the guard the runner reaches the binary, which does not exist
+        # here: that failure is the proof the guard no longer blocks.
+        with self.assertRaises(FileNotFoundError):
+            golden.run(self.args("--confirm-regeneration"))
+
+
+class SuiteSelectionTests(unittest.TestCase):
+    """Every dataset must land in exactly one tier, and the tiers must mean
+    what the regression relies on: simple = score 0, complex = non-zero score."""
+
+    def test_every_dataset_declares_a_known_tier(self):
+        for name, item in regression.DATASETS.items():
+            self.assertIn(item.get("tier"), regression.TIERS, msg=name)
+
+    def test_tiers_partition_the_datasets(self):
+        simple = set(regression.datasets_in("simple"))
+        complex_ = set(regression.datasets_in("complex"))
+        self.assertEqual(simple & complex_, set())
+        self.assertEqual(simple | complex_, set(regression.DATASETS))
+        self.assertEqual(set(regression.datasets_in("all")), set(regression.DATASETS))
+
+    def test_error_datasets_are_complex(self):
+        for name in regression.datasets_in("complex"):
+            self.assertTrue(name.endswith(("_err", "_error_smoke")), msg=name)
+
+    def test_suite_and_dataset_are_mutually_exclusive(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                regression.parse_args(["--suite", "simple", "--dataset", "c4_exact"])
+
+    def test_zero_timeout_disables_the_limit(self):
+        self.assertIsNone(regression.parse_args(["--timeout", "0"]).timeout)
+        self.assertEqual(regression.parse_args(["--timeout", "12"]).timeout, 12.0)
+
+
+class RegressionCompareTests(unittest.TestCase):
+    def test_mismatch_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cpu = root / "cpu.gaf"
+            gpu = root / "gpu.gaf"
+            cpu.write_text("seq_0\t4\t0\t4\t+\t>1+\t4\t0\t4\t4\t4\t255\tcg:Z:4M\n")
+            gpu.write_text("seq_0\t4\t0\t4\t+\t>1+\t4\t0\t4\t3\t4\t255\tcg:Z:3M1X\n")
+            errors = regression.compare_gaf(cpu, gpu)
+            self.assertTrue(errors)
+            self.assertIn("Mismatch", errors[0])
+
+    def row(self, index, cigar="4M"):
+        return f"seq_{index}\t4\t0\t4\t+\t>1+\t4\t0\t4\t4\t4\t255\tcg:Z:{cigar}\n"
+
+    def compare(self, cpu_text, gpu_text):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            cpu = root / "cpu.gaf"
+            gpu = root / "gpu.gaf"
+            cpu.write_text(cpu_text)
+            gpu.write_text(gpu_text)
+            return regression.compare_gaf(cpu, gpu)
+
+    def test_identical_output_has_no_errors(self):
+        text = self.row(0) + self.row(1)
+        self.assertEqual(self.compare(text, text), [])
+
+    def test_missing_gpu_row_is_reported(self):
+        errors = self.compare(self.row(0) + self.row(1), self.row(0))
+        self.assertTrue(any("missing GPU rows" in item for item in errors))
+        self.assertTrue(any("result count differs" in item for item in errors))
+
+    def test_duplicate_gpu_row_is_reported(self):
+        errors = self.compare(self.row(0), self.row(0) + self.row(0))
+        self.assertTrue(any("duplicate GPU query rows" in item for item in errors))
+
+
+if __name__ == "__main__":
+    unittest.main()

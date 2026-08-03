@@ -1,0 +1,6787 @@
+{
+  "converter_arguments": [
+    "--json",
+    "theseus_proxy/external_datasets/GGBS/input_data/JSON/json_files/a_ebola_0M_reads.json",
+    "--graph",
+    "theseus_proxy/data/validation/ggbs/graphs/ebola.gfa",
+    "--queries",
+    "theseus_proxy/data/validation/ggbs/queries/ebola_exact_smoke.queries",
+    "--metadata",
+    "theseus_proxy/data/validation/ggbs/truth/ebola_exact_smoke.metadata.json",
+    "--limit",
+    "256",
+    "--overwrite"
+  ],
+  "converter_git_commit": "2db3b11f27dceb37c044e4f0a21be9b0b1c9c760",
+  "converter_version": "ggbs-json-to-theseus-queries-v1",
+  "invalid_records": [],
+  "queries": [
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 0,
+      "read_id": "c3ed2bacc3eadf7c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "424"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "de6977c1115bb8ca501d661b74ad00dece0dba15ec94788572bce4e8b4db8c91",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 424
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 1,
+      "read_id": "85ad516d9934dd83",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3334"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2551bf27fd263aae434e762cb6dfe0b33944c30cf363a3016e86a6298e7fd6f0",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3334
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 2,
+      "read_id": "14f117e795fcbfb7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "175"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9e749a1807cb948fbcd4306ccc3fc19c7739feb34991ae199773ea2c83d0901f",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 175
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 3,
+      "read_id": "428242c74a992c64",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5040"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b0bfaf214e1bba534bc108c87cea1a95e80dd8e142dd262a8d508bd6dbb8241e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5040
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 4,
+      "read_id": "0671b1115b749963",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "679"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9ad6495988ede9521998d7fc17211988c415df7b96b28818fdf13699ceb07620",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 679
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 5,
+      "read_id": "4fc52d85e8eff6ba",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7521"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2fbe70795dfe0fd118d373dfdb95fac434d26ae91e959389b4404a07bdbbde92",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7521
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 6,
+      "read_id": "45b01ffb914637c1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "545"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "0f778545a826b27c3046402cb5cee842f768912efecf5349e889cd31006a08d5",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 545
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 7,
+      "read_id": "cc14cdc388f64b18",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "992"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4f820bdd339a60515b6672176332c1a214aa059f63a8a58fb8d3493535e325b6",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 992
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 8,
+      "read_id": "f9ed1b800632ff42",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2662"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3306cd6398cc62124a5b5f6a871251fea71fa1dee7b200f703e312cbede37f18",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2662
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 9,
+      "read_id": "29b6ee48fa7d08ee",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1755"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "03b8761640f394ebb7fbfcabdf96b720560d9cbef69ea194a06d8586a92eca60",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1755
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 10,
+      "read_id": "ac47a4240dce3e20",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1445"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "fefde83eb3062117ceb00e737b087250a718d5791b08bfb47a45fa145425aa03",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1445
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 11,
+      "read_id": "429ad94336eb1c26",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1339"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "636d1e1aadeee2d25c05470a2decc36b74fc9ae01ba03b9ada2f9500c53e24ac",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1339
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 12,
+      "read_id": "b88ad192850e48b0",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "796"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e5e4a3e14147a13eb7a8391f1328a591c7e68130e149e9690924307cad771640",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 796
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 13,
+      "read_id": "e67e0f7145784fdd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "212"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2320e06396aacd142d8094d311be18f67dd4a7cab60b57815101fb785cffb40e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 212
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 14,
+      "read_id": "d1de07f6ff4cbc86",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1019"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9c6fc1474d698316239764edd33b778cacc9da23e677d511536f677f2b295059",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1019
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 15,
+      "read_id": "65429718edc16dbd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2055"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "0ae88f40048e98a1a68cb44cab45f25f6b55dbbcd40124a81c46952e48384bed",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2055
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 16,
+      "read_id": "23f8e190b62c1f5d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1170"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d02e121cb8c03d99e58aa20b7b246f8f4ae8b7aca2400434606c8517e4e48fcf",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1170
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 17,
+      "read_id": "79192cfb8356944a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4752"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "bbae03aec1aa24bb7cd4ae9add43690ac0a84f54ab50d15a991184660e0bdc91",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4752
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 18,
+      "read_id": "be3d71012599bdce",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2195"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "aee4cb67452b71cb9c1639536d0291ee930add12cd136c6aa40848f63631c845",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2195
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 19,
+      "read_id": "f636e35d4f8bc95d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2818"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "bdd6bf2355707b6d2b5ad8ebcdadcc5cdb5943de12c01cae554bf82f49db1e89",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2818
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 20,
+      "read_id": "2aa70ceb07f6f545",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1222"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "dc4952491e9f92054bdc9f7390216daad9a42b04a4eb26e494169235cbe3e41b",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1222
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 21,
+      "read_id": "bddd1e1a143bc69c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3126"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1237226f75a07ab114ee9a72e15b5694c7d689aab6022384571de51ff5438dbb",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3126
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 22,
+      "read_id": "f8a750f956154cb2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3709"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "eb36005438311c17acb745c2b7a1acd7b79b5f92416574540ca0b4095d3d22df",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3709
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 23,
+      "read_id": "4b873ead50d096a2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2962"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3fd9dc65b4ccd4070eabf88997799810554d64a05da41ae3f66dbcf3b1a11799",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2962
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 24,
+      "read_id": "9a4a4e99bd18987c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3039"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9568bbde028e5b438c821b85b94fa983642bcde1ef66a24e9f0e06f4cda86e36",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3039
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 25,
+      "read_id": "9a252ace53f915d4",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "522"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "76b802a698026f5b6682aa8ae9d7d887b44cba6965047dad4c71f290e835f868",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 522
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 26,
+      "read_id": "d4b6bec9cd4826db",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8358"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "25aaec58e43a1e2acb0222164be74f597ed595a611db2dfb9fc533de2f00b0cd",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8358
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 27,
+      "read_id": "aa6810eb450dbeb5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2911"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "100d8b1bdd53ae2f1a206c8d32c049b33db42b11e6648d981d96194a390de943",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2911
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 28,
+      "read_id": "5c934d8a4e1e911c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2409"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "bcf9e3ae3d5ce93522df289e236775bd4c8391369f4ad587f4f7c3a394ffecb1",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2409
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 29,
+      "read_id": "1bc951027bad086a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2981"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1f51314864ccc3f22366cdc6b5cbd580e8d69d02f473c89d5c8de9a2d82c397e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2981
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 30,
+      "read_id": "0eac999fd8e9772e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6546"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "963cb1d68f5aa2ebcb0c40f7050b75e019e92badee052187364c81d0840c7c4b",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6546
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 31,
+      "read_id": "b89aac77c2a6d0d6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1858"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "69864c70e4b0f0b5c2193946aabf71c550b2f40bb38486af01fcc6e40d6c9325",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1858
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 32,
+      "read_id": "a96404ab0c43c2fe",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8321"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "aa826b07721293f79a8fed83802a8c78bb02dd728c3f84ed6c91d4647ae4fd70",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8321
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 33,
+      "read_id": "2a179fd9dce28102",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 93,
+              "to_length": 93
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3786"
+          },
+          "rank": "1"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 7,
+              "to_length": 7
+            }
+          ],
+          "position": {
+            "node_id": "104"
+          },
+          "rank": "2"
+        }
+      ],
+      "source_record_sha256": "566af8e7054358468bc70c44a2ae64358e28c4eb06bf952411c3938cd60f330a",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3786
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 34,
+      "read_id": "15bcdf0133c05327",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6655"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "47bb05545b8be88cdbb0e336c26c3c4f51a8c67adacd67edb7f7a7de09818dfa",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6655
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 35,
+      "read_id": "5397263071afecdf",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6975"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e4ed17c566dd7d9f9b50b1823e9c86d42ebbdd8d6c53b1155e2a42fd947a61db",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6975
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 36,
+      "read_id": "99f3b50201c8441f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6395"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "005d7f680e0fa49e50e7c7984eb9ef423d4855ecb389aa373e154f01ec429b72",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6395
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 37,
+      "read_id": "e88b4b471fdb7a7f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2076"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ebf03ef3fe2a16fc93f08807222bce1fc70c0402f64ea04e9c70658a810922a1",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2076
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 38,
+      "read_id": "34a2f8f1d06ba65c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1395"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a9d7ef7a18ca9554d466f096d79bc61404d40cb393c8ed58be09d9dcd6621a47",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1395
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 39,
+      "read_id": "d39655cd8bf38092",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "59"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3fbd337023f4ae8347984de841aa207af11e662d608b195a5623367ee4067ba7",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 59
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 40,
+      "read_id": "de9e08b5215bae8e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5926"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "94618742a125cd61859f0dbf77243ba83581f50ad0ba88f13c5d2212e24f4a0e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5926
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 41,
+      "read_id": "fca01c6e460258f5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1719"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "66b0721fb015e7707a1230e52ea828ddc5bad158876fd80cf5fd964c39596410",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1719
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 42,
+      "read_id": "facb0de6f98d8d0b",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2488"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3945ea3e763be7f35c2b1f99b388ef0e64ce48d0e381eca7827d56559f7bca0e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2488
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 43,
+      "read_id": "adcfac8a0756382f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1875"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "be9fc45f89c2a9e6c177a7ab8aa24b3b5d277ffe578bc0e624c849f3777a32d2",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1875
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 44,
+      "read_id": "d8f3838890a429d4",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "796"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b987c580ffdacd78df72fe0d2cef3d30e56c6e8fb37c45d5be276092953480bf",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 796
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 45,
+      "read_id": "557f6db0bea5747f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "925"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ff909bbe5fde358c9c9827e511db4ddf9798e023dfcff513042dcd6742c1271f",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 925
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 46,
+      "read_id": "506c9750011c96b0",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5762"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4937de4b4cd567ce24061b5f49f427d952e6c8b1147aff353876f176a490bbc0",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5762
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 47,
+      "read_id": "39344c6c38f472d0",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1712"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8f231ffdedd64bf7a3ef169ab354d232ac0ad133359cd6b3e8dc2aea8f31df3b",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1712
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 48,
+      "read_id": "32b2ce498e85b753",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3892"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a07216fc8c73c5e3e6e846fcbce3c620882481e0869a7d057833b617100eb9b4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3892
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 49,
+      "read_id": "31885067064db5c4",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "263"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "71e50ed537f9ca2174e1a53850af1a1d0c00b8aabd1458de1cdfc434b0675871",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 263
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 50,
+      "read_id": "6322ffa08d63eedd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3642"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "743e767131bc5bddd2181a518e0f75bd9cc6b811296c2e76eb447719d50bccc4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3642
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 51,
+      "read_id": "3093c278cfbbfdb7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5180"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3c28ad7e5471eeeaf96ee41988060e017c9542abc7cb175658a1eb626b13d42a",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5180
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 52,
+      "read_id": "6f9df3f3a6ed9023",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7168"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "7e1b4f4660192263ccdcf837945f6700f668e99c17bdd18eb9bf36dd1df6b9e1",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7168
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 53,
+      "read_id": "9cc88048d608b0b8",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2726"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b4dfe22923a75780057437cfa85d6ac3ea4e064acf1063b3417379023e020fc5",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2726
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 54,
+      "read_id": "aabf372c9d4de915",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8439"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "69491af75320f7ca728bfa9b597152f718c6d20b3fa87b3b288f45fe8c7b43cb",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8439
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 55,
+      "read_id": "cded1775ea8b93dd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5899"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "83b59d92b13c61e3ee60e72d2e7539fdbb5e9b74c09147f897e4c88e6dd106c2",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5899
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 56,
+      "read_id": "63499b1ffa863c9e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "983"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9af01105c546d46a4497a413ff447b6ade8b5b2e8c26e9cc08fedf53a5eafb9c",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 983
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 57,
+      "read_id": "5381377175e9465a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1572"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f0b594f9a00628e5c35d502c8bc93ec6ad2f9ecb89f0612452baac0ed2b2732a",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1572
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 58,
+      "read_id": "87cba1592d5f1f28",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2615"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3ae7dfb155ae38b6631e4b346493cc4fed2548955ab64dd8a51368a95bcc69cc",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2615
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 59,
+      "read_id": "f91c7633c7b57816",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1981"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8af764a201f3170578a523114a703eefa39646c65b9f685f90da69ab8c316be2",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1981
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 60,
+      "read_id": "d35e2be376b03141",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6951"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "24838e4ad656996c27a7ae6c4d4763a098949dd532e1b1c8cdb889c4714b31fe",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6951
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 61,
+      "read_id": "24536016967e9c1e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7284"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "245f5511ea120a7e3012fc1f762a6507b2fa3b845d56dbda3feb3485d9ec9b3f",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7284
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 62,
+      "read_id": "e9f4610232eaffb2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3966"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6d8423444794186d74b2b93f8730eacf55b5377770dd2cf0880e8d9748b9a5c8",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3966
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 63,
+      "read_id": "be32b707a1745fd0",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "999"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4be78dff48178a784e1cece3ec9cc2e24af3e5912f761df17e79b4e93e573cc8",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 999
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 64,
+      "read_id": "4258f28ac8650e26",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6986"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5f8fb68c03305bda0eda6ab861d084e287da7c1acd805fe2c781a7419538d731",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6986
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 65,
+      "read_id": "0903b58e73b2aecf",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "406"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a6ac512295593045b60e1fa5fa076c74bfa2b78738a638766f82a42c020c1720",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 406
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 66,
+      "read_id": "4cc926e31b50223c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1586"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5af6b3d554e62132a6dc47403e7ddd1fac6a6c1e806c0a46f03d6ce4ee5afcf6",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1586
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 67,
+      "read_id": "0e9e21a8d0ce0d56",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4995"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "687f92c525f76177b8fd7f6404abd0534bd0f1d2eeba148e7aa9d7e8b5a4b537",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4995
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 68,
+      "read_id": "c2fcc534627cafbc",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1872"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "751324f78a964a5e34926492d063b982e2420e34ae020790f86ddcda21d28252",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1872
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 69,
+      "read_id": "c2dbe602cb5f5bb4",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3473"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "52faec4bf06309c86dfb64a48ba9c9f16cf675dd37f8db03920bd76c0ce1f083",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3473
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 70,
+      "read_id": "9becc54fcdd94124",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6277"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "856dffdbb8d02cac20a12e872d04e037f3d3c565455166a956a10d64c7047e3c",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6277
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 71,
+      "read_id": "e58abdb56b695a86",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "808"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "7384ab2648f594be37b4ac0e95d98de0a938cf66750f0f446ecf51bce41b8d67",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 808
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 72,
+      "read_id": "440ba3142aac6a93",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1433"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d8f61cf55aa979ef1f8f29b45ff0ee7ce4dee64ce2dfc623db88a87604077e6e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1433
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 73,
+      "read_id": "812af9164079894c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8946"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "346a5826d383d10e484af13ccba2e3f6e5fae5a6c944cb115856447c37e02a6c",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8946
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 74,
+      "read_id": "8230c208d14e37af",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6133"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f22c006b363db8e3462115d7fc83197fa47dd7df9eea09592f9955bf7a323821",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6133
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 75,
+      "read_id": "85db0688ad322004",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6134"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "211d3d847094d82277b663bd024d00184d25b2bcc49b7ef5abda7623c58191b2",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6134
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 76,
+      "read_id": "aa381874ca77feb1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7268"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "fbefbdde4714d2c9930ebe3aa1eb6bca4d0e3634530a5621a25af2de35c93864",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7268
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 77,
+      "read_id": "ae046d67d442a8a9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1003"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "26cc806dc9d0017e0617ba30aa5498123026c1d40f972e22ff9ef7b00a7f507e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1003
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 78,
+      "read_id": "5a1c98e83dd4002c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "513"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "836c87349f9e82b06a1403de6a179d42d64ed34e58914ebb9b87818223896776",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 513
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 79,
+      "read_id": "5924ee874351bee1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2804"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2afcf6b632ce38cee68af1bac13865248896645f07fc82741128ee3f816d9fd8",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2804
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 80,
+      "read_id": "b9a94629d4863086",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2859"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "cd5cda1be3de756a9c17a3fc0756152c7613e8db814ae65e9445eef7ebc97d97",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2859
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 81,
+      "read_id": "8f1ca81ed13d19ff",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3466"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f512de4663c9b396dd6858c1b2ea23deade3d0517169daa0b57ec8977c225e17",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3466
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 82,
+      "read_id": "278c0520ef917309",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "331"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8d744db88a5ea7b2bb289ed71714ac2e7afb0f0faa421d6d2a973af9d16e4b1b",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 331
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 83,
+      "read_id": "6898dcff1bd2dd93",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1385"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ee5eabcca944cc0b1656da03f3fc32258f2761af239ed7461087ba853a3571b6",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1385
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 84,
+      "read_id": "5452bfe915ed41c7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "837"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "834cc8a65a1c42721f1427bd68bc11f11be52bf2a325a91f79e3319a6fb07a88",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 837
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 85,
+      "read_id": "dd270d01467c5547",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "742"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "873feafa0073b5646338c610a4f9a45c8e805a4690574211ca99fa3fadcde693",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 742
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 86,
+      "read_id": "017640d86613ff32",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "841"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2aec61fc4a178f328157fa89cd18b2dfdfe82fa54aedc0d0f8b0529fe3f30e8d",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 841
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 87,
+      "read_id": "704ead2aa0b621d1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1801"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "767d3dea78d9fae0a567abe8331642db9d1416ce676fb4be359308d7d47a84d3",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1801
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 88,
+      "read_id": "54ac738d95110b0c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "177"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b0be4794f8a26838fc0f93a7f683e5c84b247e40bbed099a7cfe0da0e7f16e6d",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 177
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 89,
+      "read_id": "d679184ed765ca1f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8783"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2bfc89538411d04876b19614085d8789b4f1a651ffaef53337fd2c61808ac83f",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8783
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 90,
+      "read_id": "b18f1bf4363bb6e8",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "122"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "13a4b905aee49f63fb8a4761768aac41d5e4f69be279907400824d0c4fcb6871",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 122
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 91,
+      "read_id": "e3caa37de7e0e0fe",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2174"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e4074f7fec4f29a5f6196419ba2d32cb956a924e1ab4492686fc67a56610ef3d",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2174
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 92,
+      "read_id": "9019849dc35d1d39",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4898"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4812727dcfcddadcdeac4fcbca6d04a164a1412640c15308e831474b5f1681b7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4898
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 93,
+      "read_id": "558f006de2b21273",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2631"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1d8dcca65ac59176eda2808f3063d4efa8371c095245937bbe54ffd39d34f1be",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2631
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 94,
+      "read_id": "f4eb9e9dfe7b54d5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 54,
+              "to_length": 54
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3825"
+          },
+          "rank": "1"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 19,
+              "to_length": 19
+            }
+          ],
+          "position": {
+            "node_id": "104"
+          },
+          "rank": "2"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 27,
+              "to_length": 27
+            }
+          ],
+          "position": {
+            "node_id": "105"
+          },
+          "rank": "3"
+        }
+      ],
+      "source_record_sha256": "ea57bf389d0e37c386fce8092cb5c75c365cda5ff96f81c6331569ee8ea60593",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3825
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 95,
+      "read_id": "31fbe1f81c0b5064",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2424"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "05572e17f2da844854dbdd7465e7e8d7b118bfadd17ca5e375ffee7681aa29d9",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2424
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 96,
+      "read_id": "ac746502ea4141a6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3286"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ebff29cf3fb9e3b1eef3a48d6c22b4bf871fa492af1f2a3d742d705a4bcebbd7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3286
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 97,
+      "read_id": "37e7c70da9db1c8b",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 12,
+              "to_length": 12
+            }
+          ],
+          "position": {
+            "node_id": "104",
+            "offset": "7"
+          },
+          "rank": "1"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 88,
+              "to_length": 88
+            }
+          ],
+          "position": {
+            "node_id": "106"
+          },
+          "rank": "2"
+        }
+      ],
+      "source_record_sha256": "8299e380cb15028937588c1b968d6f21c91fc4217a9302fbaf29aaf6b340f8eb",
+      "source_score": 110,
+      "start_node": "104",
+      "start_offset": 7
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 98,
+      "read_id": "9e4fb318f5481d62",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1413"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a6eedd2d86b9021f5a8eab3d247e491bd87c77acb8e5bda2232342262dae0859",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1413
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 99,
+      "read_id": "5fa948c703c07443",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "756"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "bbd50d104852886cb65960b9739abd70793b1c56363daac51fb6a4481c200441",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 756
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 100,
+      "read_id": "c2f85c0de510f680",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5634"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8e887e69c8a192047bff322c73865459267248afac24f1a408752399b99545be",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5634
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 101,
+      "read_id": "d4a1af9c0d521467",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "562"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2f54d57a11996c9c0a546f7dd22925267ae7a72ca7a00495891c8205d8312d63",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 562
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 102,
+      "read_id": "2a70c31607f152d9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "217"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d09a06ca47bb3d9b13b9f737773b51e77f8219eeca864bb9adf97b3969bb4064",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 217
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 103,
+      "read_id": "b839357ea7a3c788",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8267"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "33a51eac83ac4259ebd94cb63d10805307199a0c934bc6ca53c68060972d509b",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8267
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 104,
+      "read_id": "d83200fdd5bd5312",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1007"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f7681ed6a94c37d7428b636e734b8f023f331bffd2e0c20b4cb53f74480932e1",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1007
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 105,
+      "read_id": "ff54cb895f5c89db",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1538"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8f16d13b03b61b2f8b5100990249d26dadbbf81ff955b3c5a7605aff9651ce58",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1538
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 106,
+      "read_id": "7acc370100b6c867",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5332"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2384724daa5bc204df7c41759305fbe6adc5fc2debe0646109e0262091166571",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5332
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 107,
+      "read_id": "4b3b5dcea6a57de0",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6228"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d43fd9ce3d100f2837955a5c950b9419cbc9394836626334d8f76c657b1e55f7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6228
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 108,
+      "read_id": "ac6653ce4d2d5f20",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5710"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b5b3d094e3badde15b38eee0ac6acb1dfd71cc8ffc9c712efb0b1abf82c063dd",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5710
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 109,
+      "read_id": "ad6538ead2d7503d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "348"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "cc5a8dcc7fe29985527ee74ffaad8567dfef9e252ac50ca4cec5b8a89dff7138",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 348
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 110,
+      "read_id": "fce8c34652bd6717",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2422"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1d260240dfc3f58ee70faeca44dc6c8230d67c1f6c1fe4b6608a1ebe3dacbcdd",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2422
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 111,
+      "read_id": "593232ff4842f925",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2717"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6a4e5faff12d387ad0957b6c9ae41daf2f2ad5ebeae1eace1d41a3ffc28c7191",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2717
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 112,
+      "read_id": "4158d5e3cdfa48ca",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "488"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9fcad6bc0e2e763bb1c96535db90ea3e53293a3a588f3d99b6c378669e194ce1",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 488
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 113,
+      "read_id": "3c7b11b981a88c8f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 24,
+              "to_length": 24
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "1321"
+          },
+          "rank": "1"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 19,
+              "to_length": 19
+            }
+          ],
+          "position": {
+            "node_id": "104"
+          },
+          "rank": "2"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 57,
+              "to_length": 57
+            }
+          ],
+          "position": {
+            "node_id": "105"
+          },
+          "rank": "3"
+        }
+      ],
+      "source_record_sha256": "acc22bf168c05c169f0dd4d931e9b30086af7c166f406b32606d9f38362573d1",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 1321
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 114,
+      "read_id": "857c4c05425e505c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4243"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6dc3bcddb1b3fdc31fb2f6bfff75d6cb9f618ecc57409b40376c0183a4dc62d8",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4243
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 115,
+      "read_id": "480a4fe73a3ba2c8",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1748"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "abd00630c3414183f6a07f248e84d0f9be1942f0d970cc51768238fd0249c14b",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1748
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 116,
+      "read_id": "5a0887942c327c2b",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "486"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5235511cb064ffe2f29f35b0dcbc5c5d995a7fb77e8926c516e02ae5d024e5a7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 486
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 117,
+      "read_id": "bd04601558725cdf",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2228"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b5aa3ba3672e54e70d3aa0f61dbdc7f2c3805e306d93c4df6f79f614090be305",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2228
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 118,
+      "read_id": "603f487559d7c517",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6729"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c3507866d0cb8d98882adc0c5bbdc043fbe013b4d663d29c9ed5c2b918b9c35c",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6729
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 119,
+      "read_id": "8d39aad36a6d9699",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3471"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4dbf9b5c07e1919011cf16d64cab5d65c4d8ee8b8233335003bef20dbcc06be1",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3471
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 120,
+      "read_id": "a862da284e700887",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "36"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8c802066e0318453cec69de15ca82f9e44f9d35b82156c147e32612579dbc5e0",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 36
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 121,
+      "read_id": "ca75918dc665cba1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "163"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8466564b7c87e4c924f458be9ff73897741f43c4d0c3f564c5c1b0f967dba304",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 163
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 122,
+      "read_id": "a2d4bb06001f8850",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5796"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2f333c224cb7333a16be1f52e13cc1da9cad310464608709c32f52e8f0a1cb26",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5796
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 123,
+      "read_id": "93bcaa99348814fc",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5791"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "0e29636984b91934e2530ae827207306f395255923c95f295361de80825f8f65",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5791
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 124,
+      "read_id": "6d1058cd72ac0c6f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1308"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3d28f1b09bd4571fff9b87f4200ec3d7ec3670bdac90b1ab5a53656813faeef5",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1308
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 125,
+      "read_id": "0c675145e60b01cb",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2023"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4a58e08a175d4f1b57ee06ef291628d2a77c7fb0f2d6349de6c7cc5ecd6104e0",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2023
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 126,
+      "read_id": "3535acb2c26d75dc",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "799"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e6ad22705676bebb0cff61e1780f5e2dc87dbf6941969175673f1a1d4c9cfec7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 799
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 127,
+      "read_id": "5f1146d5ecc70a7d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "502"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "7251a0c6a6a52f3912a71ccbf30b3f7b32d686179428084ae81e2c27b62a99c9",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 502
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 128,
+      "read_id": "b84ce38061317bad",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "814"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9e3d29cd3a3d242e06c00347969ae58919ffaf800ddd62416398fe9e09eb9192",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 814
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 129,
+      "read_id": "5c31956d2e51cdcb",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2341"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2f34469bbdefd926a729805952a007e94ff8a9bf101163128af8d154fd5e9faa",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2341
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 130,
+      "read_id": "de12df2e636ea8f9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3517"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a6b55022b7121b4e5d9e217768418c2c385f0782d38f2cd6b6fa16d5c47824c3",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3517
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 131,
+      "read_id": "1d1eac4619048a29",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6788"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c2359721b6e29bb91fad12295ad7b6c2917926e20b3a9c5a78f9f2753b5e27c6",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6788
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 132,
+      "read_id": "f085ec0a903637d6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "344"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "749260bfdb081cde2987cdfb9965fe38cd06fbff375fba1f0da3bf71baea9c83",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 344
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 133,
+      "read_id": "5d1f8a83d5c00a67",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "909"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9faf24117629e110029577288201170921e00778f98621dbae02a412cdc07ae8",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 909
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 134,
+      "read_id": "d818ff1425702f35",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1661"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "62fb04be7b3f778465770c7bb19779a568483c6375a6187e3c3e02e9514b84a4",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1661
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 135,
+      "read_id": "a894e6297d33baf3",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3125"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5bbcd54689b002899851c2347f1171a802319834911107ec36712e242e0e4868",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3125
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 136,
+      "read_id": "cd6db11dcdcd507e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1112"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "dff82b10bb8d2293d71f38ed9b579836498ebaf15bc3774ce5c5c6776d6672d6",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1112
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 137,
+      "read_id": "eb23b5072f5ffd78",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1773"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "303b6b805b91305806bb5185fb63040849446ccde09e7e251d37984b164b2a96",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1773
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 138,
+      "read_id": "dbae29d1fc2f9ed9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2727"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a068786b3eec711d3c0b7e4a2e4c9b2093be08a8f949d698ddbaae5b23c25a65",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2727
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 139,
+      "read_id": "d7629ac6c9eea009",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5498"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f0386b3e4113c4bc5a65b18a41b541365211531761d532a3888053cf45e4fc78",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5498
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 140,
+      "read_id": "a931a2636a040fcd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4892"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e272d9b4bd130753d144b8892e044c30d796ce13bf622c2718467ecee58f2b0a",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4892
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 141,
+      "read_id": "986dd17d51d08a70",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6872"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6fdbac170804e361636184814008d6e51042afc35fa2d2fc2df4fdab6af76cc0",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6872
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 142,
+      "read_id": "be8d94acf1c3d0dd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1841"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "25eaf8e8c87007b372c6e880f9828bf9e7d6f80b5af7f87a733aad98857a5554",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1841
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 143,
+      "read_id": "46b992ffd3d65462",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8092"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e3e5c236f807434fc7e13e4a24136585ed91ac60cb890f7945bd4beab45dc2b3",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8092
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 144,
+      "read_id": "6a9b0a33f42a179d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3773"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3782bea500089900cfcd77b691788e2e9db3e872b286f9814577ee4992edc5f5",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3773
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 145,
+      "read_id": "4ed34097ce2547f3",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3859"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ab2f9ec80022473172c974b2300226a8cb57287a2ed848048bac298b3327449d",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3859
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 146,
+      "read_id": "9f242fb7d1ac6727",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1031"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "46a484ea8239b96e2f321b74269293a25ee2f18f9c8c2ba6c18cf684c19bc85f",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1031
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 147,
+      "read_id": "daf55a08399f5fed",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3199"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6d7ae5afd086a1b151b98c3ef7bd218def8a1110a04a9a665e14f0e7078e2c8a",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3199
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 148,
+      "read_id": "7450bb4eb5075103",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "607"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f22146a3da4587f138eb2d8143cea76277efafee2e2323de88ae6411049a6a7a",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 607
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 149,
+      "read_id": "892be1dc6162c99c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2065"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d62cbdd8f96fab6a49b1213a6f501f5a33ca0d9759cd952a5d0c4df40cebc9c0",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2065
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 150,
+      "read_id": "974928dcb0507f4c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5269"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "addc60426191359523853ab87a87ec9438986e45ff5349a842a3afa28bd578c4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5269
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 151,
+      "read_id": "70de62d6fad17b19",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4000"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d5cd960512a4136fe48bcf1ae48c1035f038c5d92d22d09bb7f2d55ce7b895e7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4000
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 152,
+      "read_id": "ea9b5bac0bde17b7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4611"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9f86eb6e36a9cecd8f47655f0341a544fd7d38391bfa531ef0803c73a2f21c97",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4611
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 153,
+      "read_id": "2f760a5e0580fb4e",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "847"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a8ad9b0a93ff41f05197e2a5b310ce946c3806e8376e95917360410428654c98",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 847
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 154,
+      "read_id": "07180e187c54c1c7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "222"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ceb4abe7d4381989ddb9a965176ee5d63795e00fa17e72bcf7513a80b25fb5cd",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 222
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 155,
+      "read_id": "fcdc38b1f26e4fdb",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5006"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f498a19aab21c3e4b2c9520e8000785e328e5c7fe7fbc6267845534809c8773f",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5006
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 156,
+      "read_id": "838e5b3795cdb502",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3726"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "01f4a8486de074e7ce22ede56eef45997046ea4ae46a4e2e918ca85ad4f06cac",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3726
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 157,
+      "read_id": "60947d878833eb63",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3617"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2f57ba35dd9ff2173ad7cdab8cc2ba1982852685fac8a1b6a47fa012fbd2a4bb",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3617
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 158,
+      "read_id": "9addaa865d45b55d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2763"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "870be14bfb18f1b188cd8141a03b1dc6a2f7c37530da8f2542661f14baadf984",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2763
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 159,
+      "read_id": "4eecf838693abf81",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "3332"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "045cda5b91d4b3450fb9fe7f4eb66ca2fe5f499921a827488f494edcb8a9e043",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 3332
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 160,
+      "read_id": "544da636883a6470",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1564"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "85c44a02a804f81f18a22c87a1d0131cdf682adf6805c5b3a172565df285f054",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1564
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 161,
+      "read_id": "c5cfae04df7b2ce5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1979"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "762081ef9906a82d5cfa7e5b701378338af4e73d554d0e660658e2530ad26cef",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1979
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 162,
+      "read_id": "7251b9cef131d83c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1159"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5410646f41d71f4ba207023336b57bf10477b2e41383d24a1cdfb1f2847346c2",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1159
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 163,
+      "read_id": "426d29bde3d69b39",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3723"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c656f0ba1b708c28d54fa8170bdfcc048957911689d7df6155827b744a9defae",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3723
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 164,
+      "read_id": "251d71dc04c40c74",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "467"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ed90a2cd9e2ffde16793820f77c4baa803107fe5b4913486c49abc01f1e6f9b8",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 467
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 165,
+      "read_id": "2b69c8ed3cfeedd1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "678"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c065523c98a3a0b25ea2dd1286ce3b5e21994f67ffe1778ec71bb42850e61315",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 678
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 166,
+      "read_id": "4c9a6f27858c6074",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6823"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e9ef2609969e1c7746d86390bda914598bc98bb0cb9105d29d7696dd4d381393",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6823
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 167,
+      "read_id": "54223446601d6ba5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 57,
+              "to_length": 57
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2966"
+          },
+          "rank": "1"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 20,
+              "to_length": 20
+            }
+          ],
+          "position": {
+            "node_id": "102"
+          },
+          "rank": "2"
+        },
+        {
+          "edit": [
+            {
+              "from_length": 23,
+              "to_length": 23
+            }
+          ],
+          "position": {
+            "node_id": "107"
+          },
+          "rank": "3"
+        }
+      ],
+      "source_record_sha256": "f11815fe1bc437422cc89356a5d2dff3a3c2db9df02071aa749e6e1895d1ec23",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2966
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 168,
+      "read_id": "4d6998fcde901f4f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6960"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "231775d7d27f956adbb43ed5808dd9d940dffeb4d31bb8eedb37bdefadf08556",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6960
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 169,
+      "read_id": "2d5e2b851d26ed5d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5900"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "21382817c0ad2b747401b5779b02c6672539a3bafb80cb71149a56abf459117d",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5900
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 170,
+      "read_id": "370c4ba9f03f7586",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4988"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c25cb63fcaaca6ca67b7a488b6e6d8257a0da52867522d31e69307ae1150a593",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4988
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 171,
+      "read_id": "e335921603b57cc5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1711"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "55265b020028a6ca590275db219a3fb7b7323494933c6eb5eb7a7e1f947586a8",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1711
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 172,
+      "read_id": "ab300546c4091123",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2515"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a2ddce2fc4cf6c78fe129fbbb184f67a353cbd8d73e37794a9b30ddd33dbaaa4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2515
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 173,
+      "read_id": "46766ee0bcd4c2b5",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "352"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "225d1b7184d2c71e5f0890e4f2210a4b4277b8f785bca3f0608ab2288743ba39",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 352
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 174,
+      "read_id": "c89fff705e71f319",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6070"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "76a07ae8d04ee2010e1aab8e1865415326ff9d96295a4ce0938bb025b43c8f97",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6070
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 175,
+      "read_id": "e860a1c869372b7c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "177"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6272de9f9c029431b8631dd1b3a7877ccf5c7f32b45d87018edf37520806fba3",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 177
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 176,
+      "read_id": "91be0e6a8aeac8f9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "2872"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "94e6b09865c43d20d4ac6f27e01b391aea91304f86f67ec875f00d78f1a40524",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 2872
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 177,
+      "read_id": "fa5132f7c3cdde0d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8061"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "35f0de4a754f3207cd1db7e9e36e8409f503d7fbff9d1c1298a42d5d6fa199b6",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8061
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 178,
+      "read_id": "b76d84635b4b33ba",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1114"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "784643d962826de61deee3c1b9e1e28d3230e9bf9e8aa8a9fc4f4379f0a8ae78",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1114
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 179,
+      "read_id": "c301933807b09a54",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "149"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "7f343510c87a7adb9bbbad7ce757e45c4db6cd31e42da29da78e866370af8244",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 149
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 180,
+      "read_id": "8b595eff32d70327",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5070"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "015da847131f3af44ed4c39a9b42bd1249d85da00d4d57f060292a994d29b252",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5070
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 181,
+      "read_id": "4662648c1e61cd24",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5cb54a4a1570b92ba51f0baefb03b06368676758f66e673aebeba28acd681220",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 0
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 182,
+      "read_id": "4ed766a1523613f3",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "475"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1900c20438b10a2eec1fc1c143656e4f34b7cea2e8abeeb133d883174b194528",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 475
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 183,
+      "read_id": "f4c9598448a07262",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2969"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6452ddf5e645655637289072b2d7a4c55470f44aecd6f3dca78d030c542e171d",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2969
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 184,
+      "read_id": "7353a35576f065f2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "427"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "16573976da67b35b2537938ddf1c52903815f881bf9d3820dc1a3905ff43faa3",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 427
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 185,
+      "read_id": "86e3bf13a6f9b62d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1288"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "400372bac49d1b81426377f8432e2e8ddf7201bafdd0f72464fe84251f78eb9d",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1288
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 186,
+      "read_id": "c4fba585e6112759",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2129"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "33f5259d4d8656dfd1dbbafa15ca3abc2f2b7b24697d0276329710b5f117ce94",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2129
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 187,
+      "read_id": "37f2c23a03bece41",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "794"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "439e8606afd8d5e25591da2f9c42fc4b436b5ef84d5f76ec7d17ed0efd143eb0",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 794
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 188,
+      "read_id": "c783be758702e2c6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1234"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9ec0b1027668ec7f0e1584938b3202325447ae0d4ecf2e7d7728370db6d14c93",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1234
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 189,
+      "read_id": "56f485f6464b68be",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3572"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "176b3df9efd3c2201ed6a02af058e36e0f92eae36b398819e2f4f151852dfaa7",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3572
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 190,
+      "read_id": "bcab67b92c4f47be",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6225"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4fcfaee3b2cf8270c05d903e8418029f3d5162a57240b61b700c13642e9223f5",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6225
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 191,
+      "read_id": "2636138d209ece59",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6119"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5c12d5517dc399810bed306b4a2bb2060a2d999a3256ff75a09830ddf269a3fe",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6119
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 192,
+      "read_id": "f95c34f857b84e27",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4082"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "efe3ee6167e5c8d49ff295cf0f1eefa39a820a6c5ecd3378968a288345793cf4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4082
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 193,
+      "read_id": "68b6bd85a0fbfc41",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "36"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5254a3d713a3122583e9621d82485ec9e22745cc1fe4ec647f2f6fbbe31bc720",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 36
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 194,
+      "read_id": "a8f98a526ea83a72",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "88"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "8d534aac394213fd28a76515d6a972e815dac8dc109b4189f8d3222a3b988e60",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 88
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 195,
+      "read_id": "8a99ade1b1f55808",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "537"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "324b051e28d6b1673d0b0a9a76186624b0a8ab30d60434259bbf0946baa6c21b",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 537
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 196,
+      "read_id": "f1ee86817c9a77f3",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1849"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "adec18ca55f9f5d35f29d4cf730f942a653c480b45aee079768523924d43ba0a",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1849
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 197,
+      "read_id": "89f9b7697a6a9ffd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1203"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ebee7b73ccc506a6939e4778f5575da66e4ab7bc2df350d6135242da2dfa1623",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1203
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 198,
+      "read_id": "3a08cdd195f8c785",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1281"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "c76c1de33a6b0d00cc217b934a4675d755f228b1d37889a863b2129d3b4d0a47",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1281
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 199,
+      "read_id": "2d9e75f02269a487",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1829"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "508f44f3ad17079c5ebec31191327cec299e3296416f64820d667b997ea36edb",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1829
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 200,
+      "read_id": "5bd49ab8d84682e1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "49"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "95bc334189061edba6063d46311a119fb4c295fec3352ebeab8797922f6d439e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 49
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 201,
+      "read_id": "3587965e512267de",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5769"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "32db81b2eb78a5c39eb9b17ff69c3d24deda2ca3ffba11780ba918f6e690347f",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5769
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 202,
+      "read_id": "2f19f9b2ed792050",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7297"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e6085337b281c2121b36463367a94356107e1326d698124c4ee4a49476443377",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7297
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 203,
+      "read_id": "420744d7706e458c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1188"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9025e5bd5fbb19cc1eca89fc62ce6cb26e6d2ce71a2fcaa6096a17f7a6dbd89e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1188
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 204,
+      "read_id": "c97db222fce8be76",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5183"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "45f87f265232157d1f53467c419dac252f97b070621ca49113f397dab3e54e58",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5183
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 205,
+      "read_id": "c8f834cfa07cbb2d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2643"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "00b115d3f4b3b68529d001cac20be25903988f78ab6c6abab8f13e8504262a8d",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2643
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 206,
+      "read_id": "9962524cd60adbba",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "54"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4d775977d5d16f2313f04c1c8f9bb2f81bc51be39bf3bfe40b1e045ed29c91a7",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 54
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 207,
+      "read_id": "87b9912e4635ce74",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2839"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5732a9390e4ee54ddaf74301b843f9ee19ad1e3536020ec208e081b2680d6a3e",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2839
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 208,
+      "read_id": "a2d2202408936199",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2746"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "754ce2b99c38b73f2c12adced30de8a982de4e2dfe4a29e0285e717f4dad0f36",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2746
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 209,
+      "read_id": "a8f9e975b7e20140",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2060"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "76832a9c4598c6bfaea43d241be1c1657e219f7a130a2c6fc7e3424890dcaa95",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2060
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 210,
+      "read_id": "6720f60eb6c47581",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1104"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "84e3e883bb228b17b2ec14b4cf4fe67079c40d14d8f4cdfa34c83158bbf80f3d",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1104
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 211,
+      "read_id": "1b6b56f2a1e0f570",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5101"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e5a1677a35b5e3e174f5399999c565ddaadaaa1203c9ca2ac0ed107387716458",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5101
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 212,
+      "read_id": "1b905cf01af4c173",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6849"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3531148200bcce9929e4300ccf07eb23bca9e447b9abf0004c31b4ba8907b773",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6849
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 213,
+      "read_id": "74667a0bad5c6a6b",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "986"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "4e413e1fe8abaf26016a4f88702dd74198e4ac9353b14e8115766102cc22cb3e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 986
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 214,
+      "read_id": "8bb5a639f3f85c2d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "1060"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f1f8e304a9b113f4b149e41437c260001adcf2dfcdbb8ee1af95127706dc0aad",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 1060
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 215,
+      "read_id": "0011787d315f1f6c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2459"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "71dca687644c017f1a63b95be845cacda2a85471795e27eacf119a16680d07bd",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2459
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 216,
+      "read_id": "3ca7c4e3ad969797",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6507"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "7e20009b3ec802f7c6e6bd46bd3da2d86383686c3d7f4bdf841d050ebdb0443b",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6507
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 217,
+      "read_id": "31890e1a1c4185a2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7547"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ec916f0b4dd8e54a678ce42a1c5e52ae7d8842a720b9f8531de38a7989f37ad6",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7547
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 218,
+      "read_id": "cbbb2da861e001f2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "8027"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "3204ce0a42752aa0b40cb7ad519fec4f69c04cb945fd84a805f478a2744c51e1",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 8027
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 219,
+      "read_id": "828d923fa99f7de3",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6255"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "76bf3f3c7a6963056fb6af00249c12612669cb3a5881693dd8ac7ca5b2d9460d",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6255
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 220,
+      "read_id": "efde8f37cb31a628",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2334"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1161b72dda27d2f5f827d9e1fcd9c1f95785d937cb48c5af26c5174666039f1b",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2334
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 221,
+      "read_id": "c34935ddb5bb0b3b",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1136"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f8c40e36e4d1e653619b38dbec8cbc26d5effca3e285ffbc4597efd9216fc2e7",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1136
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 222,
+      "read_id": "d31de880b169c086",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2441"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "267ef91703cceeddb9a346f2332868878b57e463171715a0ae60396261724a32",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2441
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 223,
+      "read_id": "5bbf7726bf2fe7e2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "1260"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "de6b2008c7afc3e9ac86f86b6da8e388328002681d5af065eec22fb643fa715e",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 1260
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 224,
+      "read_id": "f1b5b7d0ccbecba2",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "407"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "73b3391ea3fb3f3aaed55ce002262e72397fea238378168ea6db6f2309bb9be0",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 407
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 225,
+      "read_id": "56d5f0a42c24d355",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2182"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "9c28549c126bbc4c28a90d26886f2f07402d7834295704b71abf52876358dabd",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2182
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 226,
+      "read_id": "bd38c6b6e28568bd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4055"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d3ded1c2d72bfa7de3a34c1457927a1217a2a576c92ecefaa8ca0f628634baf9",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4055
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 227,
+      "read_id": "58dc543a78e2ba39",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6257"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "429fbb31436e0c80d51ec254654481abbdd4744d76adf3c35099f45dfeb90fa9",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6257
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 228,
+      "read_id": "8f221ec614c7e8c1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "5492"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a0a5cfa3c7d48f8f85677f6990ed85c03cba74a3a2e44f5613223f3a16cb2766",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 5492
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 229,
+      "read_id": "c60d98b80ea6b7c6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2364"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "09a2051a76fa09ec2ac3ab764f2e22a5cdec4f78d0c68864197d460e013cd23c",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2364
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 230,
+      "read_id": "e886f90ec6250108",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7849"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "53508176a0d86f2c133af0318b70a015c5f7eb7d8809e21b2905419785b1a892",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7849
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 231,
+      "read_id": "cea2619bd5aa9534",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "743"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e46820109a5815d37a30423b5c901b90e0f9c19ca6405b5759a454ecca0def0b",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 743
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 232,
+      "read_id": "900df65cea4ee91d",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "153"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "493001a2dc460d51d1da66caf09e74ca95967afaffb5b3823ad3b749bd5f12b4",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 153
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 233,
+      "read_id": "c4df3f852e76ec82",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "486"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f3091b36442b69e46cdf59e40bd0fadf8c7f05b20bfc256ea0b3bae126495cbe",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 486
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 234,
+      "read_id": "ae24ba4efbe9047a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "2503"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "11c648daf498aaee9e0c0d129626802cd35337fc67b8f329c416251fc95bf99e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 2503
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 235,
+      "read_id": "f00cf267ed0653cc",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7638"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5df9d208bc1e685ab716782b1b7932c257dd42afb5d70d53fe4da8a3dad32bc4",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7638
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 236,
+      "read_id": "1594c7a7754f97ff",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6861"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "55354678740c12eb6bc05742b9b2086440ad940206b25a24668280d8d205ea94",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6861
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 237,
+      "read_id": "b8b556aacda40c3c",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1639"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1e784d30b06b868541f27405af07e25250a62280c708ebb4b522c3261332841e",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1639
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 238,
+      "read_id": "9416f8798a5aeb98",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6368"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d9dba583f978e3ab9dda8300282759805f3f417676e6858d08c49ef781f21949",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6368
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 239,
+      "read_id": "1f6466beef45b33a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "851"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b69c4d260c4e4fa24332233591f0c7f33a3c97de8de938864a482a6354115103",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 851
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 240,
+      "read_id": "f32770ee5ad900bd",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "4595"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6f21127899a1a0fd28bbae4f9060fb74898fd84c302556f8d78732f88a760e56",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 4595
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 241,
+      "read_id": "982ecb5491fa2c2f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7112"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "e21390dee745486e41c53acdaee966fb420cb33d71312732b749819a2c5e4f13",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7112
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 242,
+      "read_id": "e3a14d49e8fd6216",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1367"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "5d3afef7a8d62bfe7823ef6eee64e7b6161866c8605c20e899133776187f1dc5",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1367
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 243,
+      "read_id": "7d9c2cba4289995a",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7735"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "96b726a7fa091002130c4bd8520cd9484e5b745985a30f9277c91c88fcc15dbd",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7735
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 244,
+      "read_id": "caeb1bc1bba7feb1",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "1316"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "ff957fa7b467f63112f98c108e75079a12c87866c861f3d6f39686b183301536",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 1316
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 245,
+      "read_id": "ec68d480faf34ba7",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6495"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "d164b00d5a5aeea43c6d88bfa738f6dda6cba34d6072db8bf5021d203c46d781",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6495
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 246,
+      "read_id": "ea1def26930c5a78",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3434"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "efcbf7cc95115061796663368c88964caba54a9623d176c363be4aeb7b5ba294",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3434
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 247,
+      "read_id": "bff3a3389ff677d9",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "101",
+            "offset": "596"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "a7e0e79b2b7c52bc0827ae0802f55b0daccede668ee765d5d73cd8fd77cb454e",
+      "source_score": 110,
+      "start_node": "101",
+      "start_offset": 596
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 248,
+      "read_id": "47c77c807eccc503",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "1432"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "645b36c6367031abfb4926d0d77cd4a663d464d708385f393d7d26c6e02f5254",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 1432
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 249,
+      "read_id": "8138edc092bc954f",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "6344"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "df22370b0c23f816b2292bd87731d1a0677695bb397552b7bcce0b37ac618a58",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 6344
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 250,
+      "read_id": "690926d8a6a7e411",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "3565"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "1bc8fb939d4113c1bfed93cf3a8ce63ae87e6f206d65ed1da2e27b5cd2c8fc4f",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 3565
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 251,
+      "read_id": "acba65f4e17ef762",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "144"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "2ddaeaec7a7fe1307119a7147b19b4a92a59f0fe3f6eae3d5327ac3a3391dd1d",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 144
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 252,
+      "read_id": "b18756616e2c8517",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "107",
+            "offset": "7172"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "b811a74b03a2dcf9ab33ce80fad23f884837e887448c980268e75aa93e515d23",
+      "source_score": 110,
+      "start_node": "107",
+      "start_offset": 7172
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 253,
+      "read_id": "de47e692952f39d6",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "103",
+            "offset": "543"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "f35f7cb3928249b9ddc16b6c92155e9ad301242aa75fa8e01a43ed2484259881",
+      "source_score": 110,
+      "start_node": "103",
+      "start_offset": 543
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 254,
+      "read_id": "5a7c3cea17d16bf4",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "105",
+            "offset": "2676"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "6aa50056e2348b06f25a7b7a0c14926e8726f1948b30a16dcc04cdfe27184818",
+      "source_score": 110,
+      "start_node": "105",
+      "start_offset": 2676
+    },
+    {
+      "identity": 1.0,
+      "orientation": "+",
+      "query_index": 255,
+      "read_id": "5df39d019b3156a8",
+      "sequence_length": 100,
+      "source_mapping": [
+        {
+          "edit": [
+            {
+              "from_length": 100,
+              "to_length": 100
+            }
+          ],
+          "position": {
+            "node_id": "106",
+            "offset": "1341"
+          },
+          "rank": "1"
+        }
+      ],
+      "source_record_sha256": "61eda683195488bb5d2591a63921fc9cab3000cc8b359e4551cbdbffbdbb9c52",
+      "source_score": 110,
+      "start_node": "106",
+      "start_offset": 1341
+    }
+  ],
+  "queries_sha256": "2078df27ba901e74389d9324c6a9202fbb3c395c393655f22c646b6afbe210c6",
+  "schema_version": 1,
+  "source_graph": "theseus_proxy/data/validation/ggbs/graphs/ebola.gfa",
+  "source_graph_sha256": "befdc17679b5dded3a51d5b2745bc9cb4d7717c9aa5e785ca11b0d09ee0d6e67",
+  "source_json": "theseus_proxy/external_datasets/GGBS/input_data/JSON/json_files/a_ebola_0M_reads.json",
+  "source_json_sha256": "745419ae440420b84599be621be185dfde06b4d4e7fee843c994e9b14ba16c1e",
+  "stats": {
+    "forward_count": 256,
+    "invalid_record_count": 0,
+    "maximum_length": 100,
+    "mean_length": 100.0,
+    "minimum_length": 100,
+    "query_count": 256,
+    "reverse_count": 0,
+    "total_bases": 25600
+  }
+}
