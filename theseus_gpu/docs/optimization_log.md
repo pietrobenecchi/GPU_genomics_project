@@ -6,12 +6,12 @@ intervento, in ordine cronologico. Il vincolo che governa tutto resta invariato:
 ogni voce deve restare **byte-identical** ai golden dell'oracle su tutti e
 quattro i dataset.
 
-> **Nota su config 0.** Dopo Opt #3 config 0 è stata rimossa da `main` e
-> conservata sulla branch `legacy/config0`; il kernel rimasto ha perso il
-> prefisso `config1_` da tutti i nomi. Le colonne e i confronti qui sotto
-> continuano a nominarla perché è il **baseline contro cui ogni speedup è stato
-> misurato**: riscriverli renderebbe i numeri illeggibili. Per riprodurre una
-> qualunque di queste misure serve `git checkout legacy/config0`.
+Questo file è **append-only**: le voci passate non si riscrivono mai, si
+aggiungono soltanto. Ogni numero qui dentro è misurato contro uno stato preciso
+del codice, quindi allineare una voce vecchia al codice di oggi la renderebbe
+irriproducibile. Quando una modifica rende obsoleta una voce, si aggiunge una
+voce nuova che spiega come rileggere le precedenti — è il caso di
+*Struttura #1*, che va letta prima di tutto ciò che la precede.
 
 ## Ambiente e metodo di misura
 
@@ -313,6 +313,60 @@ racecheck puliti su `c4_err` a 64 e 256 thread.
 
 ---
 
+## Struttura #1 — config 0 spostata su `legacy/config0`
+
+**Non è un'ottimizzazione**: nessuna riga di logica del kernel è cambiata, non
+c'è nessuna misura associata. È registrata qui perché **cambia come si leggono
+tutte le voci sopra**.
+
+**Cosa.** Config 0 (un thread CUDA per query intera) era il baseline di misura,
+non un target di sviluppo. È stata rimossa da `main` e conservata sulla branch
+`legacy/config0`, al commit `40c074d`, dove entrambe le configurazioni erano
+presenti e validate insieme. Con una sola configurazione rimasta, la scelta fra
+configurazioni non ha più significato: sono spariti anche `GpuConfig`,
+`AlignOptions::config`, il parametro `gpu_config` di `align_batch_gpu`,
+`GpuBatchReport::gpu_config` e il flag CLI `--gpu-config`.
+
+Da `align_core.h` sono state rimosse le ricorrenze seriali che solo config 0
+chiamava: `core_next_i`, `core_next_d`, `core_next_m`, `core_next_d_densify`,
+`core_next_m_densify`, `core_process_vertex`, `core_compute_new_wave`,
+`align_one`. Restano le metà `_sparsify`, l'LCP, la macchina dei jump e
+`core_extend_diagonal`, che il kernel usa ancora.
+
+**Come rileggere le voci precedenti.** Tutti gli speedup di Opt #1, Opt #2 e
+Opt #3 sono misurati contro config 0 o contro uno stato in cui esisteva. Per
+riprodurne uno qualunque: `git checkout legacy/config0`. Le colonne
+`config0 reg` / `config0 stack` della tabella di stato restano valide per quella
+branch.
+
+**Rinomine.** Il kernel rimasto ha perso il prefisso `config1_` da ogni nome.
+Le voci sopra usano i nomi vecchi; la corrispondenza è:
+
+| prima | ora |
+|---|---|
+| `theseus_align_batch_config1_kernel` | `theseus_align_batch_kernel` |
+| `align_one_config1` | `align_one` |
+| `config1_densify` | `densify` |
+| `config1_process_vertex` | `process_vertex` |
+| `config1_compute_new_wave` | `compute_new_wave` |
+| `config1_expand_and_compact` | `expand_and_compact` |
+| `config1_generate_and_merge_i_candidates` | `generate_and_merge_i_candidates` |
+| `config1_extend_and_consume_m_cells` | `extend_and_consume_m_cells` |
+| `config1_prepare_i_candidate_ranges` | `prepare_i_candidate_ranges` |
+| `config1_make_i_candidate` / `config1_merge_i_candidate` | `make_i_candidate` / `merge_i_candidate` |
+| `config1_finish_i_wavefront` | `finish_i_wavefront` |
+| `config1_shared_bytes` | `kernel_shared_bytes` |
+| `Config1ICandidateRanges` | `ICandidateRanges` |
+| `kConfig1MaxWarps` | `kMaxWarps` |
+
+**Verifica.** Build non-CUDA e `ctest` 5/5 verdi, GAF byte-identical al
+baseline. **Il `.cu` non è stato compilato**: la macchina su cui è stata fatta la
+rimozione non ha nvcc, e il controllo è stato solo `g++ -fsyntax-only` contro
+shim CUDA. La regressione GGBS su GPU va rieseguita prima di fidarsi di questo
+stato.
+
+---
+
 ## Profiling Nsight Compute
 
 Prima run di profiling, fatta dopo Opt #2. Comando:
@@ -389,8 +443,9 @@ con `core_extend_diagonal` che può ricorrere.
    i `prev_pos`, cioè esattamente ciò su cui i golden sono confrontati:
    parallelizzarlo mantenendo il byte-identical richiede offset da prefix-sum più
    una worklist esplicita per la ricorsione. Non è un passo incrementale.
-2. **Tiling delle sparsify di D e M** — resta l'unica parte non parallela di
-   `core_next_d`/`core_next_m` dopo Opt #3. Le tre fasi sono disgiunte nel tempo,
+2. **Tiling delle sparsify di D e M** — `core_next_d_sparsify` e
+   `core_next_m_sparsify` restano l'unica parte non parallela del percorso D/M
+   dopo Opt #3. Le tre fasi sono disgiunte nel tempo,
    quindi possono riusare lo stesso buffer in shared: costo zero di occupancy.
    Priorità bassa: sono O(1) per candidato, ed è il motivo per cui Opt #3 ha
    preso di mira la coda invece della testa.
