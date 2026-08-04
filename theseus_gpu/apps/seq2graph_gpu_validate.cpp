@@ -44,8 +44,7 @@ std::string long_graph_text(int n) {
 }
 
 bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
-               bool require_device, bool expect_workspace_overflow,
-               int gpu_config) {
+               bool require_device, bool expect_workspace_overflow) {
   std::stringstream graph_cpu(graph_text());
   std::stringstream graph_gpu(graph_text());
   theseus::Penalties penalties(0, 2, 3, 1);
@@ -72,12 +71,12 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
 
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> gpu_alignments =
-      gpu.align_batch_gpu(seqs, starts, offsets, &report, gpu_config, 128);
+      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128);
 
   bool ok = true;
   if (require_device && !report.aligned_on_device) {
-    std::cerr << name << " config " << gpu_config
-              << ": CUDA alignment did not run: " << report.message << "\n";
+    std::cerr << name << ": CUDA alignment did not run: " << report.message
+              << "\n";
     ok = false;
   }
   if (expect_workspace_overflow && report.aligned_on_device &&
@@ -92,18 +91,17 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
   }
   for (size_t i = 0; i < cpu_alignments.size(); ++i) {
     if (!same_alignment(cpu_alignments[i], gpu_alignments[i])) {
-      std::cerr << name << " config " << gpu_config
-                << ": alignment mismatch at query " << i
+      std::cerr << name << ": alignment mismatch at query " << i
                 << " cpu_score=" << score_alignment(cpu_alignments[i])
                 << " gpu_score=" << score_alignment(gpu_alignments[i]) << "\n";
       ok = false;
     }
   }
-  std::cerr << name << " config " << gpu_config << ": " << report.message << "\n";
+  std::cerr << name << ": " << report.message << "\n";
   return ok;
 }
 
-bool run_workspace_case(bool require_device, int gpu_config) {
+bool run_workspace_case(bool require_device) {
   // The point of this case is that an overflow is detected and reported, so the
   // input has to exceed whatever the current capacity is rather than a value
   // that happened to exceed it once. A vertex and a query of this length need
@@ -121,23 +119,20 @@ bool run_workspace_case(bool require_device, int gpu_config) {
   theseus::Alignment cpu_alignment = cpu.align(seqs[0], starts[0], offsets[0]);
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> gpu_alignments =
-      gpu.align_batch_gpu(seqs, starts, offsets, &report, gpu_config, 128);
+      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128);
 
   bool ok = same_alignment(cpu_alignment, gpu_alignments[0]);
   if (require_device && !report.aligned_on_device) {
-    std::cerr << "workspace_overflow config " << gpu_config
-              << ": CUDA alignment did not run: "
+    std::cerr << "workspace_overflow: CUDA alignment did not run: "
               << report.message << "\n";
     ok = false;
   }
   if (report.aligned_on_device && !report.query_state_capacity_exceeded) {
-    std::cerr << "workspace_overflow config " << gpu_config
-              << ": expected overflow, got: "
+    std::cerr << "workspace_overflow: expected overflow, got: "
               << report.message << "\n";
     ok = false;
   }
-  std::cerr << "workspace_overflow config " << gpu_config << ": "
-            << report.message << "\n";
+  std::cerr << "workspace_overflow: " << report.message << "\n";
   return ok;
 }
 
@@ -180,12 +175,10 @@ int main(int argc, char **argv) {
   }
 
   bool ok = true;
-  std::cerr << "CPU baseline plus GPU Config 0 / Config 1 validation\n";
-  for (int gpu_config : {0, 1}) {
-    ok = run_batch("basic_cases", basic, require_device, false, gpu_config) && ok;
-    ok = run_batch("batch_gt_block", large_batch, require_device, false, gpu_config) && ok;
-    ok = run_workspace_case(require_device, gpu_config) && ok;
-  }
+  std::cerr << "CPU baseline versus GPU kernel validation\n";
+  ok = run_batch("basic_cases", basic, require_device, false) && ok;
+  ok = run_batch("batch_gt_block", large_batch, require_device, false) && ok;
+  ok = run_workspace_case(require_device) && ok;
   ok = run_invalid_start_case() && ok;
 
   return ok ? 0 : 1;

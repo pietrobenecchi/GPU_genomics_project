@@ -143,7 +143,7 @@ constexpr int kMaxJumpsPerScore = 32;
 // graph is 1 (store_I_jump is reached only by c4_err; none of the graphs holds a
 // zero-length segment). 8 leaves room for a chain of seven. It is a device-side
 // local array of 56-byte frames, so 256 cost 14 336 bytes of local memory per
-// thread and dominated the config1 register/spill budget. Overflow is not
+// thread and dominated the kernel's register/spill budget. Overflow is not
 // silent: cap_fail records kCapIJumpStack with the depth that was needed.
 constexpr int kMaxIJumpStack = 8;
 

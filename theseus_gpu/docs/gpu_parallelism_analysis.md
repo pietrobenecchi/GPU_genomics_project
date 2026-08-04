@@ -3,9 +3,14 @@
 Analisi statica del backend CUDA in `theseus_gpu/`. Nessuna modifica al codice.
 I riferimenti sono `file:riga` relativi a `theseus_gpu/`.
 
-Il codice analizzato è lo stato di lavoro corrente (`src/gpu/align_gpu.cu`,
-`src/gpu/align_core.h`, `src/query_state.h` risultano modificati rispetto a
-`daf657e`).
+> **Snapshot del commit `40c074d`, quando esistevano ancora due configurazioni.**
+> Subito dopo, config 0 è stata spostata sulla branch `legacy/config0` e rimossa
+> da `main`, e il kernel rimasto ha perso il prefisso `config1_` da tutti i nomi
+> (`config1_densify` → `densify`, `align_one_config1` → `align_one`,
+> `theseus_align_batch_config1_kernel` → `theseus_align_batch_kernel`, ...).
+> Numeri di riga e nomi qui sotto vanno quindi letti contro `legacy/config0`.
+> L'analisi di *cosa fa* il kernel resta valida: la rimozione non ha cambiato
+> una riga di logica.
 
 ---
 

@@ -73,13 +73,7 @@ struct AlignScoring {
     int32_t nscores;
 };
 
-enum class GpuConfig : int32_t {
-    Config0 = 0,
-    Config1 = 1,
-};
-
 struct AlignOptions {
-    GpuConfig config = GpuConfig::Config0;
     int32_t threads_per_block = 128;
     int32_t collect_counters = 0;
 };
@@ -134,8 +128,8 @@ const TimingReport &last_timing();
 /**
  * @brief Align a batch of queries on the device.
  *
- * Version 0 uploads @p batch, launches one CUDA thread per query, and
- * runs a complete serial Theseus alignment inside that thread. @p out_seq_lengths
+ * Uploads @p batch and launches one block per query, each block running a
+ * complete Theseus alignment over its own QueryState. @p out_seq_lengths
  * receives each sequence length as computed on the device, which lets the caller
  * verify the upload against host-side data.
  *

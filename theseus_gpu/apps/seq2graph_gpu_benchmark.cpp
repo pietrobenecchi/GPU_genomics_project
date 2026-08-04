@@ -47,11 +47,10 @@ double time_ms(Fn &&fn) {
 BenchResult run_gpu(theseus::TheseusAligner &aligner,
                     const std::vector<std::string> &seqs,
                     std::vector<std::string> starts,
-                    std::vector<int> offsets,
-                    int config) {
+                    std::vector<int> offsets) {
   BenchResult result;
   result.wall_ms = time_ms([&] {
-    (void)aligner.align_batch_gpu(seqs, starts, offsets, &result.report, config, 128);
+    (void)aligner.align_batch_gpu(seqs, starts, offsets, &result.report, 128);
   });
   result.alignments_per_s = seqs.size() * 1000.0 / result.wall_ms;
   result.bases_per_s = total_bases(seqs) * 1000.0 / result.wall_ms;
@@ -80,8 +79,8 @@ int main(int argc, char **argv) {
   }
 
   theseus::Penalties penalties(0, 2, 3, 1);
-  std::cout << "batch,cpu_ms,gpu0_wall_ms,gpu0_kernel_ms,gpu1_wall_ms,gpu1_kernel_ms,"
-               "gpu0_align_s,gpu1_align_s,gpu0_bases_s,gpu1_bases_s,gpu0_status,gpu1_status\n";
+  std::cout << "batch,cpu_ms,gpu_wall_ms,gpu_kernel_ms,gpu_align_s,gpu_bases_s,"
+               "gpu_status\n";
 
   for (int n : batch_sizes()) {
     std::vector<std::string> seqs = make_queries(n);
@@ -89,22 +88,18 @@ int main(int argc, char **argv) {
     std::vector<int> offsets(static_cast<size_t>(n), 0);
 
     std::ifstream cpu_graph(graph_path);
-    std::ifstream gpu0_graph(graph_path);
-    std::ifstream gpu1_graph(graph_path);
+    std::ifstream gpu_graph(graph_path);
     theseus::TheseusAligner cpu(penalties, cpu_graph);
-    theseus::TheseusAligner gpu0(penalties, gpu0_graph);
-    theseus::TheseusAligner gpu1(penalties, gpu1_graph);
+    theseus::TheseusAligner gpu(penalties, gpu_graph);
 
     const double cpu_ms = run_cpu(cpu, seqs, starts, offsets);
-    const BenchResult gpu0_result = run_gpu(gpu0, seqs, starts, offsets, 0);
-    const BenchResult gpu1_result = run_gpu(gpu1, seqs, starts, offsets, 1);
+    const BenchResult gpu_result = run_gpu(gpu, seqs, starts, offsets);
 
-    std::cout << n << ',' << cpu_ms << ',' << gpu0_result.wall_ms << ','
-              << gpu0_result.report.kernel_ms << ',' << gpu1_result.wall_ms << ','
-              << gpu1_result.report.kernel_ms << ',' << gpu0_result.alignments_per_s << ','
-              << gpu1_result.alignments_per_s << ',' << gpu0_result.bases_per_s << ','
-              << gpu1_result.bases_per_s << ",\"" << gpu0_result.report.message << "\","
-              << "\"" << gpu1_result.report.message << "\"\n";
+    std::cout << n << ',' << cpu_ms << ',' << gpu_result.wall_ms << ','
+              << gpu_result.report.kernel_ms << ','
+              << gpu_result.alignments_per_s << ','
+              << gpu_result.bases_per_s << ",\""
+              << gpu_result.report.message << "\"\n";
   }
 
   return 0;

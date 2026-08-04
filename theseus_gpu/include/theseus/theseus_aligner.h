@@ -87,7 +87,6 @@ namespace theseus
         // says what to raise kScratchpadSpan to rather than only that it is low.
         int scratchpad_span_required = 0;
         int scratchpad_span_available = 0;
-        int gpu_config = 0;
         int gpu_threads_per_block = 128;
         float graph_ms = 0.0f;
         float h2d_ms = 0.0f;
@@ -157,10 +156,11 @@ namespace theseus
          * GPU alignment entry point for a batch of sequences.
          *
          * This is the shape the device path needs: the whole batch is uploaded
-         * once and one CUDA thread is assigned per query, so the transfer is amortised
+         * once and one CUDA block is assigned per query, so the transfer is amortised
          * across the batch instead of paid per sequence.
          *
-         * The Version 0 kernel computes one complete serial alignment per CUDA thread.
+         * The kernel computes one complete alignment per block, with the phases
+         * that are independent per element spread across the block's threads.
          * The host validates kernel results against the CPU and reconstructs the
          * final GAF-compatible alignment from copied-back device state when the
          * signatures match. Pass @p report to find out what the backend did.
@@ -176,7 +176,6 @@ namespace theseus
                 std::vector<std::string> &start_nodes,
                 std::vector<int> &start_offsets,
                 GpuBatchReport *report = nullptr,
-                int gpu_config = 0,
                 int gpu_threads_per_block = 128);
 
     private:

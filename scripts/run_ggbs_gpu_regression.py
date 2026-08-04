@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run Theseus GPU configs and compare their GAF output with a saved CPU golden."""
+"""Run the Theseus GPU kernel and compare its GAF output with a saved CPU golden."""
 
 from __future__ import annotations
 
@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-CONFIGS = [(0, None), (1, 64), (1, 128), (1, 256)]
+# Threads per block the kernel accepts. The kernel itself no longer has
+# variants: the one-thread-per-query config 0 lives on the legacy/config0
+# branch and is not built here.
+THREAD_COUNTS = [64, 128, 256]
 
 # Datasets split by what they demand of the aligner, not by size.
 #
@@ -186,13 +189,12 @@ def resolve_dataset(args: argparse.Namespace) -> tuple[Path, Path, Path, Path | 
     return graph, queries, golden, metadata
 
 
-def run_config(
+def run_kernel(
     *,
     binary: Path,
     graph: Path,
     queries: Path,
     output: Path,
-    config: int,
     threads: int | None,
     timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
@@ -201,7 +203,6 @@ def run_config(
     # unusable and still writes correct alignments, so the GAF compares equal to
     # the golden and the run looks like a pass.
     command += ["--require-gpu-result"]
-    command += ["--gpu-config", str(config)]
     if threads is not None:
         command += ["--gpu-threads", str(threads)]
     command += ["-g", str(graph), "-s", str(queries), "-f", str(output)]
@@ -254,7 +255,7 @@ def run_dataset(
     output_dir: Path,
     timeout: float | None,
 ) -> list[str]:
-    """Run every config for one dataset. Returns failure descriptions."""
+    """Run every thread count for one dataset. Returns failure descriptions."""
     for required in (graph, queries, golden):
         if not required.exists():
             raise RuntimeError(
@@ -268,17 +269,15 @@ def run_dataset(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     failures: list[str] = []
-    for config, threads in CONFIGS:
-        suffix = f"config{config}" if threads is None else f"config{config}_{threads}"
-        output = output_dir / f"{name}.{suffix}.gaf"
-        label = f"{name} config {config}" + ("" if threads is None else f" threads {threads}")
+    for threads in THREAD_COUNTS:
+        output = output_dir / f"{name}.threads{threads}.gaf"
+        label = f"{name} threads {threads}"
         try:
-            completed = run_config(
+            completed = run_kernel(
                 binary=binary,
                 graph=graph,
                 queries=queries,
                 output=output,
-                config=config,
                 threads=threads,
                 timeout=timeout,
             )

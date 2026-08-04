@@ -6,6 +6,13 @@ intervento, in ordine cronologico. Il vincolo che governa tutto resta invariato:
 ogni voce deve restare **byte-identical** ai golden dell'oracle su tutti e
 quattro i dataset.
 
+> **Nota su config 0.** Dopo Opt #3 config 0 è stata rimossa da `main` e
+> conservata sulla branch `legacy/config0`; il kernel rimasto ha perso il
+> prefisso `config1_` da tutti i nomi. Le colonne e i confronti qui sotto
+> continuano a nominarla perché è il **baseline contro cui ogni speedup è stato
+> misurato**: riscriverli renderebbe i numeri illeggibili. Per riprodurre una
+> qualunque di queste misure serve `git checkout legacy/config0`.
+
 ## Ambiente e metodo di misura
 
 - **GPU**: Tesla T4 (sm_75, 15360 MiB) su Colab. 64 KB shared/SM, 65 536

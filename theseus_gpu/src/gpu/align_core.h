@@ -217,77 +217,14 @@ THESEUS_HD inline void core_check_and_store_jumps(QueryState &qs, const char *qu
     }
 }
 
-THESEUS_HD inline void core_next_i(QueryState &qs, const AlignScoring &scoring,
-                                   const char *query, int32_t query_len,
-                                   const GraphCsrView &graph, int32_t score,
-                                   int32_t v, bool &end, Cell &end_cell) {
-    const int32_t upper_bound = vertex_len(graph, v);
-    const int32_t pos_prev_m = score - (scoring.gapo + scoring.gape);
-    const int32_t pos_prev_i = score - scoring.gape;
-    const int32_t pos_prev_m_scope = vd_get_pos(qs, pos_prev_m);
-    const int32_t pos_prev_i_scope = vd_get_pos(qs, pos_prev_i);
-    const int32_t v_id = vd_get_id(qs, v);
-
-    if (pos_prev_i >= 0) {
-        if (sc_i_pos_size(qs, pos_prev_i) > v_id) {
-            core_sparsify_indel(qs, sc_i_wf(qs, pos_prev_i), 0, 1,
-                                sc_i_pos(qs, pos_prev_i)[v_id], query_len, upper_bound);
-        }
-        core_sparsify_jumps(qs, qs.bs_i_jumps_wf, vd_i_jumps(qs, v, pos_prev_i_scope),
-                            vd_i_jumps_size(qs, v, pos_prev_i_scope), 0, 1,
-                            query_len, upper_bound, Cell::Matrix::IJumps);
-    }
-    if (pos_prev_m >= 0) {
-        if (sc_m_pos_size(qs, pos_prev_m) > v_id) {
-            core_sparsify_m(qs, qs.bs_m_wf, 0, 1, sc_m_pos(qs, pos_prev_m)[v_id],
-                            query_len, upper_bound);
-        }
-        core_sparsify_jumps(qs, qs.bs_m_jumps_wf, vd_m_jumps(qs, v, pos_prev_m_scope),
-                            vd_m_jumps_size(qs, v, pos_prev_m_scope), 0, 1,
-                            query_len, upper_bound, Cell::Matrix::MJumps);
-    }
-
-    Range new_range;
-    new_range.start = sc_i_wf_size(qs, score);
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::I, v, diag)) {
-            sc_wf_push(qs, sc_i_wf(qs, score), sc_i_wf_size(qs, score), sp_at(qs, diag));
-        }
-    }
-    new_range.end = sc_i_wf_size(qs, score);
-    sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
-
-    // Mirrors the tail of the CPU's next_I: every I cell that has just reached
-    // the last column of this vertex opens M and I jumps into the neighbours.
-    // Without it those jump candidates never enter the later wavefronts.
-    if (edge_begin(graph, v) < edge_end(graph, v)) {
-        core_check_and_store_jumps(qs, query, query_len, graph, score, v,
-                                   sc_i_wf(qs, score), new_range, end, end_cell);
-    }
-}
-
 /**
- * @brief Densify half of core_next_d: scan the active diagonals, keep the ones
- * still valid for this vertex, append them to the score's D wavefront.
+ * @brief Sparsify half of the D recurrence: fold every contribution that can
+ * reach this vertex's D wavefront into the ScratchPad, where candidates landing
+ * on the same diagonal collide and the largest offset wins.
  *
- * Split out so config1 can replace it with a block-parallel filter+compaction
- * while config0 keeps calling the serial pair through core_next_d.
+ * The densify half that used to follow it is now the block-parallel
+ * filter+compaction in align_gpu.cu.
  */
-THESEUS_HD inline void core_next_d_densify(QueryState &qs, int32_t score,
-                                           int32_t v) {
-    Range new_range;
-    new_range.start = sc_d_wf_size(qs, score);
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::D, v, diag)) {
-            sc_wf_push(qs, sc_d_wf(qs, score), sc_d_wf_size(qs, score), sp_at(qs, diag));
-        }
-    }
-    new_range.end = sc_d_wf_size(qs, score);
-    sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), new_range);
-}
-
 THESEUS_HD inline void core_next_d_sparsify(QueryState &qs, const AlignScoring &scoring,
                                             int32_t query_len, const GraphCsrView &graph,
                                             int32_t score, int32_t v) {
@@ -312,28 +249,7 @@ THESEUS_HD inline void core_next_d_sparsify(QueryState &qs, const AlignScoring &
     }
 }
 
-THESEUS_HD inline void core_next_d(QueryState &qs, const AlignScoring &scoring,
-                                   int32_t query_len, const GraphCsrView &graph,
-                                   int32_t score, int32_t v) {
-    core_next_d_sparsify(qs, scoring, query_len, graph, score, v);
-    core_next_d_densify(qs, score, v);
-}
-
-/** @brief Densify half of core_next_m. See core_next_d_densify. */
-THESEUS_HD inline void core_next_m_densify(QueryState &qs, int32_t score,
-                                           int32_t v) {
-    Range new_range;
-    new_range.start = qs.bs_m_wf_size;
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::M, v, diag)) {
-            bs_push_back(qs, qs.bs_m_wf, qs.bs_m_wf_size, sp_at(qs, diag));
-        }
-    }
-    new_range.end = qs.bs_m_wf_size;
-    sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), new_range);
-}
-
+/** @brief Sparsify half of the M recurrence. See core_next_d_sparsify. */
 THESEUS_HD inline void core_next_m_sparsify(QueryState &qs, const AlignScoring &scoring,
                                             int32_t query_len, const GraphCsrView &graph,
                                             int32_t score, int32_t v) {
@@ -363,13 +279,6 @@ THESEUS_HD inline void core_next_m_sparsify(QueryState &qs, const AlignScoring &
     }
 }
 
-THESEUS_HD inline void core_next_m(QueryState &qs, const AlignScoring &scoring,
-                                   int32_t query_len, const GraphCsrView &graph,
-                                   int32_t score, int32_t v) {
-    core_next_m_sparsify(qs, scoring, query_len, graph, score, v);
-    core_next_m_densify(qs, score, v);
-}
-
 THESEUS_HD inline void core_extend_diagonal(QueryState &qs, const char *query,
                                             int32_t query_len, const GraphCsrView &graph,
                                             int32_t score, Cell &curr_cell,
@@ -384,97 +293,6 @@ THESEUS_HD inline void core_extend_diagonal(QueryState &qs, const char *query,
         core_store_m_jump(qs, query, query_len, graph, score, curr_cell.vertex_id,
                           prev_cell, prev_pos, from_matrix, end, end_cell);
     }
-}
-
-THESEUS_HD inline void core_process_vertex(QueryState &qs, const AlignScoring &scoring,
-                                           const char *query, int32_t query_len,
-                                           const GraphCsrView &graph, int32_t score,
-                                           int32_t v, bool &end, Cell &end_cell) {
-    core_next_i(qs, scoring, query, query_len, graph, score, v, end, end_cell);
-    sp_reset(qs);
-    core_next_d(qs, scoring, query_len, graph, score, v);
-    sp_reset(qs);
-    core_next_m(qs, scoring, query_len, graph, score, v);
-    sp_reset(qs);
-
-    const int32_t v_pos = vd_get_id(qs, v);
-    const Range cells_range = sc_m_pos(qs, score)[v_pos];
-    for (int64_t idx = cells_range.start; idx < cells_range.end; ++idx) {
-        core_extend_diagonal(qs, query, query_len, graph, score, qs.bs_m_wf[idx],
-                             qs.bs_m_wf[idx], idx, Cell::Matrix::M, end, end_cell);
-    }
-}
-
-THESEUS_HD inline void core_compute_new_wave(QueryState &qs, const AlignScoring &scoring,
-                                             const char *query, int32_t query_len,
-                                             const GraphCsrView &graph, int32_t score,
-                                             bool &end, Cell &end_cell) {
-    vd_expand(qs);
-    vd_compact(qs);
-    const int32_t num_active = vd_num_active_vertices(qs);
-    for (int32_t l = 0; l < num_active; ++l) {
-        core_process_vertex(qs, scoring, query, query_len, graph, score,
-                            vd_get_vertex_id(qs, l), end, end_cell);
-    }
-}
-
-THESEUS_HD inline void align_one(QueryState &qs, const AlignScoring &scoring,
-                                 const char *query, int32_t query_len,
-                                 const GraphCsrView &graph, int32_t start_node,
-                                 int32_t start_offset, AlignResult &result) {
-    qs.capacity_exceeded = false;
-    int32_t max_diag = 0;
-    for (int32_t v = 0; v < graph.num_vertices; ++v) {
-        const int32_t n = vertex_len(graph, v);
-        if (n > max_diag) {
-            max_diag = n;
-        }
-    }
-    sp_init(qs, -query_len, max_diag);
-    sc_init(qs, scoring.nscores);
-    vd_init(qs, scoring.gapo, scoring.gape, scoring.nscores, graph.num_vertices);
-    sc_new_alignment(qs);
-    bs_new_alignment(qs);
-    vd_new_alignment(qs);
-
-    int32_t score = 0;
-    bool end = false;
-    Cell end_cell{-1, -1, -1, -1, Cell::Matrix::None};
-
-    sc_new_score(qs, score);
-    Cell init_condition;
-    init_condition.offset = 0;
-    init_condition.vertex_id = start_node;
-    init_condition.diag = start_offset;
-    init_condition.prev_pos = -1;
-    init_condition.from_matrix = Cell::Matrix::None;
-
-    bs_push_back(qs, qs.bs_m_jumps_wf, qs.bs_m_jumps_wf_size, init_condition);
-    vd_activate_vertex(qs, start_node);
-    vd_jumps_push(qs, vd_m_jumps(qs, start_node, 0), vd_m_jumps_size(qs, start_node, 0), 0);
-
-    while (!end && !qs.capacity_exceeded) {
-        if (score == 0) {
-            core_extend_diagonal(qs, query, query_len, graph, score, qs.bs_m_jumps_wf[0],
-                                 qs.bs_m_jumps_wf[0], 0, Cell::Matrix::MJumps,
-                                 end, end_cell);
-        }
-        core_compute_new_wave(qs, scoring, query, query_len, graph, score, end, end_cell);
-        ++score;
-        sc_new_score(qs, score);
-        vd_new_score(qs, score);
-    }
-    --score;
-
-    result.score = score;
-    result.end_vertex_id = end_cell.vertex_id;
-    result.end_offset = end_cell.offset;
-    result.end_diag = end_cell.diag;
-    result.end_prev_pos = end_cell.prev_pos;
-    result.end_from_matrix = static_cast<int8_t>(end_cell.from_matrix);
-    result.reached_end = end ? 1 : 0;
-    result.capacity_exceeded = qs.capacity_exceeded ? 1 : 0;
-    result.reserved = 0;
 }
 
 }  // namespace gpu

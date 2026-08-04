@@ -22,7 +22,6 @@ struct CmdArgs {
   std::string sequences_file;
   std::string output_file;
   Backend backend = Backend::Cpu;
-  int gpu_config = 0;
   int gpu_threads = 128;
   bool require_gpu_result = false;
 };
@@ -46,7 +45,6 @@ void help() {
       << "  -s, --sequences_file <file>  FASTA with start metadata (required)\n"
       << "  -f, --output_file <file>     Output GAF path (required)\n"
       << "  -b, --backend <cpu|gpu>      Alignment backend (default cpu)\n"
-      << "      --gpu-config <0|1>       GPU configuration (default 0)\n"
       << "      --gpu-threads <64|128|256> Threads per GPU block (default 128)\n"
       << "      --require-gpu-result     Fail unless the output came from the GPU\n"
       << "                               kernel. Without it a kernel that produced\n"
@@ -64,7 +62,6 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"sequences_file", required_argument, nullptr, 's'},
       {"output_file", required_argument, nullptr, 'f'},
       {"backend", required_argument, nullptr, 'b'},
-      {"gpu-config", required_argument, nullptr, 1000},
       {"gpu-threads", required_argument, nullptr, 1001},
       {"require-gpu-result", no_argument, nullptr, 1002},
       {nullptr, 0, nullptr, 0}};
@@ -108,14 +105,6 @@ CmdArgs parse_args(int argc, char *const *argv) {
         }
         break;
       }
-      case 1000:
-        args.gpu_config = std::stoi(optarg);
-        if (args.gpu_config != 0 && args.gpu_config != 1) {
-          std::cerr << "Invalid --gpu-config: " << args.gpu_config
-                    << " (expected 0 or 1)\n";
-          std::exit(1);
-        }
-        break;
       case 1002:
         args.require_gpu_result = true;
         break;
@@ -212,12 +201,12 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
  * reports is written to stderr rather than assumed.
  */
 bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
-             std::ostream &out_stream, int gpu_config, int gpu_threads,
+             std::ostream &out_stream, int gpu_threads,
              bool require_gpu_result) {
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
       inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
-      gpu_config, gpu_threads);
+      gpu_threads);
 
   for (size_t i = 0; i < alignments.size(); ++i) {
     aligner.print_alignment_as_gaf(alignments[i], out_stream,
@@ -284,8 +273,8 @@ int main(int argc, char *const *argv) {
 
   bool gpu_ok = true;
   if (args.backend == Backend::Gpu) {
-    gpu_ok = run_gpu(aligner, inputs, output_file, args.gpu_config,
-                     args.gpu_threads, args.require_gpu_result);
+    gpu_ok = run_gpu(aligner, inputs, output_file, args.gpu_threads,
+                     args.require_gpu_result);
   } else {
     run_cpu(aligner, inputs, output_file);
   }

@@ -170,7 +170,6 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     std::vector<std::string> &start_nodes,
     std::vector<int> &start_offsets,
     GpuBatchReport *report,
-    int gpu_config,
     int gpu_threads_per_block) {
 
     // Pre-flight the one bound that is derivable rather than measured.
@@ -220,7 +219,6 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     std::vector<gpu::AlignResult> device_results(seqs.size());
     std::vector<QueryState> device_states(seqs.size());
     gpu::AlignOptions options;
-    options.config = (gpu_config == 1) ? gpu::GpuConfig::Config1 : gpu::GpuConfig::Config0;
     options.threads_per_block = gpu_threads_per_block;
 
     const gpu::Status status = gpu::align_batch(
@@ -232,7 +230,6 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         report->device_used = (status == gpu::Status::Ok ||
                                status == gpu::Status::NotImplemented);
         report->aligned_on_device = (status == gpu::Status::Ok);
-        report->gpu_config = gpu_config;
         report->gpu_threads_per_block = gpu_threads_per_block;
         const gpu::TimingReport &timing = gpu::last_timing();
         report->graph_ms = timing.graph_ms;
@@ -240,9 +237,9 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         report->kernel_ms = timing.kernel_ms;
         report->d2h_ms = timing.d2h_ms;
         report->end_to_end_ms = timing.end_to_end_ms;
-        report->message = std::string("config ") + std::to_string(gpu_config) +
-                          "; threads/block " + std::to_string(gpu_threads_per_block) +
-                          "; " + gpu::status_message(status);
+        report->message = std::string("threads/block ") +
+                          std::to_string(gpu_threads_per_block) + "; " +
+                          gpu::status_message(status);
 
         const char *error = gpu::last_error();
         if (error != nullptr && error[0] != '\0') {

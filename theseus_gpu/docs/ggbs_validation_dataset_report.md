@@ -249,7 +249,7 @@ Recommended conversion source:
 - Cost: moderate/high for frequent dev; 49k nodes, 67k edges, 10k reads.
 - Complexity: many multi-mapping reads and many branch out-nodes.
 - Strengths: milestone validation for path-heavy behavior.
-- Weaknesses: larger than needed for daily regression; not the first choice before Config 1 stabilizes.
+- Weaknesses: larger than needed for daily regression; not the first choice before the GPU kernel stabilizes.
 - Useful for: active vertices, long multi-node traceback, GAF path stability.
 
 ### MHC
@@ -277,7 +277,7 @@ Recommended suite:
 | Role | Dataset | Reads | Reason |
 |---|---|---:|---|
 | Smoke dataset | `ebola` exact + err subset | 100 to 500 selected reads | Fastest real graph. Good for every build and quick CPU/GPU path equality. |
-| Daily validation dataset | `C4` exact + err subset/full | 1,000 selected reads initially, full 10,000 when stable | Small real graph with branching and multi-node paths. Best balance for frequent Config 1 regression. |
+| Daily validation dataset | `C4` exact + err subset/full | 1,000 selected reads initially, full 10,000 when stable | Small real graph with branching and multi-node paths. Best balance for frequent GPU regression. |
 | Branching dataset | `covid` exact + err subset | 500 to 1,000 selected reads | Highly fragmented graph; best active-vertices and graph-jump stress without using profiling-size reads. |
 | Milestone dataset | `MHC` exact + err subset/full | 1,000 selected reads, full 10,000 at milestones | Real human variation locus; stronger biological representativeness. |
 | Orientation add-on | `ecoli` selected reverse-orientation reads | small curated subset | Use only for orientation regression because GGBS placed it under `IGNORE`. |
@@ -290,11 +290,10 @@ For each selected dataset and read subset:
 
 1. Convert JSON truth to Theseus query format and expected-truth format.
 2. Run CPU baseline.
-3. Run GPU Config 0.
-4. Run GPU Config 1 with 64 threads.
-5. Run GPU Config 1 with 128 threads.
-6. Run GPU Config 1 with 256 threads.
-7. Compare all GPU outputs against CPU output, not just against GGBS approximate position truth.
+3. Run the GPU kernel with 64 threads per block.
+4. Run the GPU kernel with 128 threads per block.
+5. Run the GPU kernel with 256 threads per block.
+6. Compare all GPU outputs against CPU output, not just against GGBS approximate position truth.
 
 Required checks:
 
@@ -338,8 +337,8 @@ Do not implement these yet. The required scripts are:
    - Compare score, path, traceback, CIGAR, GAF, overflow, fallback flags.
 
 5. `run_validation_matrix`
-   - Runs CPU, Config 0, Config 1 at 64/128/256 threads.
-   - Produces one machine-readable report per dataset/config.
+   - Runs CPU and the GPU kernel at 64/128/256 threads per block.
+   - Produces one machine-readable report per dataset and thread count.
 
 ## 10. Hand-built unit-test read set
 
@@ -384,7 +383,7 @@ Use at every milestone:
 
 - Full `C4`.
 - `covid` branching subset.
-- `MHC` subset/full after Config 1 is stable.
+- `MHC` subset/full after the GPU kernel is stable.
 - Optional `ecoli` reverse-orientation subset.
 
 Use only for profiling:
