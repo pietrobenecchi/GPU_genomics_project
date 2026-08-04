@@ -267,9 +267,30 @@ THESEUS_HD inline void core_next_i(QueryState &qs, const AlignScoring &scoring,
     }
 }
 
-THESEUS_HD inline void core_next_d(QueryState &qs, const AlignScoring &scoring,
-                                   int32_t query_len, const GraphCsrView &graph,
-                                   int32_t score, int32_t v) {
+/**
+ * @brief Densify half of core_next_d: scan the active diagonals, keep the ones
+ * still valid for this vertex, append them to the score's D wavefront.
+ *
+ * Split out so config1 can replace it with a block-parallel filter+compaction
+ * while config0 keeps calling the serial pair through core_next_d.
+ */
+THESEUS_HD inline void core_next_d_densify(QueryState &qs, int32_t score,
+                                           int32_t v) {
+    Range new_range;
+    new_range.start = sc_d_wf_size(qs, score);
+    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
+        const int32_t diag = qs.sp_diags[di];
+        if (vd_valid_diagonal(qs, Cell::Matrix::D, v, diag)) {
+            sc_wf_push(qs, sc_d_wf(qs, score), sc_d_wf_size(qs, score), sp_at(qs, diag));
+        }
+    }
+    new_range.end = sc_d_wf_size(qs, score);
+    sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), new_range);
+}
+
+THESEUS_HD inline void core_next_d_sparsify(QueryState &qs, const AlignScoring &scoring,
+                                            int32_t query_len, const GraphCsrView &graph,
+                                            int32_t score, int32_t v) {
     const int32_t upper_bound = vertex_len(graph, v);
     const int32_t pos_prev_m = score - (scoring.gapo + scoring.gape);
     const int32_t pos_prev_d = score - scoring.gape;
@@ -289,22 +310,33 @@ THESEUS_HD inline void core_next_d(QueryState &qs, const AlignScoring &scoring,
                             vd_m_jumps_size(qs, v, pos_prev_m_scope), 1, -1,
                             query_len, upper_bound, Cell::Matrix::MJumps);
     }
-
-    Range new_range;
-    new_range.start = sc_d_wf_size(qs, score);
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::D, v, diag)) {
-            sc_wf_push(qs, sc_d_wf(qs, score), sc_d_wf_size(qs, score), sp_at(qs, diag));
-        }
-    }
-    new_range.end = sc_d_wf_size(qs, score);
-    sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), new_range);
 }
 
-THESEUS_HD inline void core_next_m(QueryState &qs, const AlignScoring &scoring,
+THESEUS_HD inline void core_next_d(QueryState &qs, const AlignScoring &scoring,
                                    int32_t query_len, const GraphCsrView &graph,
                                    int32_t score, int32_t v) {
+    core_next_d_sparsify(qs, scoring, query_len, graph, score, v);
+    core_next_d_densify(qs, score, v);
+}
+
+/** @brief Densify half of core_next_m. See core_next_d_densify. */
+THESEUS_HD inline void core_next_m_densify(QueryState &qs, int32_t score,
+                                           int32_t v) {
+    Range new_range;
+    new_range.start = qs.bs_m_wf_size;
+    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
+        const int32_t diag = qs.sp_diags[di];
+        if (vd_valid_diagonal(qs, Cell::Matrix::M, v, diag)) {
+            bs_push_back(qs, qs.bs_m_wf, qs.bs_m_wf_size, sp_at(qs, diag));
+        }
+    }
+    new_range.end = qs.bs_m_wf_size;
+    sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), new_range);
+}
+
+THESEUS_HD inline void core_next_m_sparsify(QueryState &qs, const AlignScoring &scoring,
+                                            int32_t query_len, const GraphCsrView &graph,
+                                            int32_t score, int32_t v) {
     const int32_t upper_bound = vertex_len(graph, v);
     const int32_t pos_prev_m = score - scoring.mism;
     const int32_t pos_prev_d = score;
@@ -329,17 +361,13 @@ THESEUS_HD inline void core_next_m(QueryState &qs, const AlignScoring &scoring,
                             vd_m_jumps_size(qs, v, pos_prev_m_scope), 1, 0,
                             query_len, upper_bound, Cell::Matrix::MJumps);
     }
+}
 
-    Range new_range;
-    new_range.start = qs.bs_m_wf_size;
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::M, v, diag)) {
-            bs_push_back(qs, qs.bs_m_wf, qs.bs_m_wf_size, sp_at(qs, diag));
-        }
-    }
-    new_range.end = qs.bs_m_wf_size;
-    sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), new_range);
+THESEUS_HD inline void core_next_m(QueryState &qs, const AlignScoring &scoring,
+                                   int32_t query_len, const GraphCsrView &graph,
+                                   int32_t score, int32_t v) {
+    core_next_m_sparsify(qs, scoring, query_len, graph, score, v);
+    core_next_m_densify(qs, score, v);
 }
 
 THESEUS_HD inline void core_extend_diagonal(QueryState &qs, const char *query,

@@ -138,7 +138,14 @@ constexpr int kMaxVertices = 2048;
 constexpr int kMaxActiveVertices = 256;
 constexpr int kMaxInvalidSegments = 64;
 constexpr int kMaxJumpsPerScore = 32;
-constexpr int kMaxIJumpStack = 256;
+// Derived, not guessed. The stack only grows on a chain of zero-length
+// vertices, and the measured peak across all four GGBS datasets plus the sample
+// graph is 1 (store_I_jump is reached only by c4_err; none of the graphs holds a
+// zero-length segment). 8 leaves room for a chain of seven. It is a device-side
+// local array of 56-byte frames, so 256 cost 14 336 bytes of local memory per
+// thread and dominated the config1 register/spill budget. Overflow is not
+// silent: cap_fail records kCapIJumpStack with the depth that was needed.
+constexpr int kMaxIJumpStack = 8;
 
 /**
  * @brief One run of invalid diagonals for a vertex/matrix, with the countdowns

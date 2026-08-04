@@ -186,19 +186,116 @@ __device__ void config1_merge_i_candidate(QueryState &qs,
     }
 }
 
-__device__ Range config1_finish_i_wavefront(QueryState &qs, int32_t score,
-                                            int32_t v) {
-    Range new_range;
-    new_range.start = sc_i_wf_size(qs, score);
-    for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
-        const int32_t diag = qs.sp_diags[di];
-        if (vd_valid_diagonal(qs, Cell::Matrix::I, v, diag)) {
-            sc_wf_push(qs, sc_i_wf(qs, score), sc_i_wf_size(qs, score),
-                       sp_at(qs, diag));
+constexpr int32_t kConfig1MaxWarps = 8;  // 256 threads, the largest block allowed
+
+/**
+ * @brief Block-parallel replacement for the densify loops of I, D and M.
+ *
+ * The serial form walks the active diagonals, keeps those still valid for this
+ * vertex and appends them in order. That is a filter followed by a stream
+ * compaction, and the test (vd_valid_diagonal) is a read-only scan of the
+ * vertex's invalid segments, so every diagonal can be tested independently.
+ * Only the write position is shared, and an exclusive prefix sum reproduces the
+ * serial positions exactly, which is what keeps the output byte-identical.
+ *
+ * The prefix sum is a warp ballot plus a scan over the (at most 8) warp totals,
+ * so it needs no external scan primitive and 9 ints of shared memory.
+ *
+ * Overflow keeps the serial semantics: elements that do not fit are dropped and
+ * cap_fail records the buffer with the size the first failing push would have
+ * reported. @p track_peak mirrors sc_wf_push updating sc_peak_wf, which
+ * bs_push_back does not do.
+ */
+__device__ Range config1_densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
+                                 Cell *wf, int32_t &wf_size, int32_t capacity,
+                                 CapBuffer cap_buffer, bool track_peak,
+                                 int32_t *shared_warp_base, int32_t &shared_accum) {
+    const int32_t ndiags = qs.sp_ndiags;   // uniform: densify never touches it
+    const int32_t range_start = wf_size;   // read before thread 0 updates it
+    const int32_t lane = threadIdx.x & 31;
+    const int32_t warp = threadIdx.x >> 5;
+    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
+
+    if (threadIdx.x == 0) {
+        shared_accum = 0;
+    }
+    __syncthreads();
+
+    for (int32_t tile = 0; tile < ndiags; tile += blockDim.x) {
+        const int32_t di = tile + static_cast<int32_t>(threadIdx.x);
+        int32_t flag = 0;
+        Cell value{-1, -1, -1, -1, Cell::Matrix::None};
+        if (di < ndiags) {
+            const int32_t diag = qs.sp_diags[di];
+            if (vd_valid_diagonal(qs, matrix, v, diag)) {
+                flag = 1;
+                value = sp_at(qs, diag);
+            }
+        }
+
+        // Every thread reaches the ballot, including the out-of-range ones with
+        // flag 0, so the warp stays converged.
+        const unsigned ballot = __ballot_sync(0xffffffffu, flag != 0);
+        const int32_t warp_prefix =
+            __popc(ballot & ((1u << lane) - 1u));
+        if (lane == 0) {
+            shared_warp_base[warp] = __popc(ballot);
+        }
+        __syncthreads();
+
+        if (threadIdx.x == 0) {
+            int32_t acc = shared_accum;
+            for (int32_t w = 0; w < nwarps; ++w) {
+                const int32_t count = shared_warp_base[w];
+                shared_warp_base[w] = acc;   // exclusive base for this warp
+                acc += count;
+            }
+            shared_accum = acc;
+        }
+        __syncthreads();
+
+        if (flag != 0) {
+            const int32_t pos = range_start + shared_warp_base[warp] + warp_prefix;
+            if (pos < capacity) {
+                wf[pos] = value;
+            }
+        }
+        __syncthreads();   // shared_warp_base is reused by the next tile
+    }
+
+    if (threadIdx.x == 0) {
+        const int32_t total = shared_accum;
+        const int32_t room = capacity - range_start;
+        const int32_t fits = room > 0 ? room : 0;
+        const int32_t written = total < fits ? total : fits;
+        if (total > fits) {
+            cap_fail(qs, cap_buffer, capacity + 1, capacity);
+        }
+        wf_size = range_start + written;
+        if (track_peak && wf_size > qs.sc_peak_wf) {
+            qs.sc_peak_wf = wf_size;
         }
     }
-    new_range.end = sc_i_wf_size(qs, score);
-    sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
+    __syncthreads();
+
+    Range r;
+    r.start = range_start;
+    r.end = wf_size;
+    return r;
+}
+
+__device__ Range config1_finish_i_wavefront(QueryState &qs, int32_t score,
+                                            int32_t v,
+                                            int32_t *shared_warp_base,
+                                            int32_t &shared_accum) {
+    const Range new_range =
+        config1_densify(qs, Cell::Matrix::I, v, sc_i_wf(qs, score),
+                        sc_i_wf_size(qs, score), kScopeWavefrontCapacity,
+                        kCapScopeWavefront, true, shared_warp_base, shared_accum);
+    if (threadIdx.x == 0) {
+        sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
+    }
+    __syncthreads();
     return new_range;
 }
 
@@ -222,7 +319,8 @@ __device__ void config1_generate_and_merge_i_candidates(
         const GraphCsrView &graph, int32_t score, int32_t v,
         Config1ICandidateRanges &shared_i_ranges,
         Cell *shared_i_candidates, int *shared_i_valid,
-        int &shared_i_count, int &block_end, Cell &block_end_cell) {
+        int &shared_i_count, int32_t *shared_warp_base, int32_t &shared_accum,
+        int &block_end, Cell &block_end_cell) {
     if (threadIdx.x == 0) {
         shared_i_ranges = config1_prepare_i_candidate_ranges(qs, scoring, graph,
                                                              score, v);
@@ -261,8 +359,10 @@ __device__ void config1_generate_and_merge_i_candidates(
         __syncthreads();
     }
 
+    const Range new_range = config1_finish_i_wavefront(qs, score, v,
+                                                       shared_warp_base,
+                                                       shared_accum);
     if (threadIdx.x == 0) {
-        const Range new_range = config1_finish_i_wavefront(qs, score, v);
         // Same tail as the CPU's next_I and as core_next_i: the I cells that
         // just reached the last column of this vertex open jumps into its
         // neighbours. core_store_m_jump can hit the end condition, so the
@@ -346,6 +446,8 @@ __device__ void config1_process_vertex(QueryState &qs,
                                        Cell *shared_i_candidates,
                                        int *shared_i_valid,
                                        int &shared_i_count,
+                                       int32_t *shared_warp_base,
+                                       int32_t &shared_accum,
                                        int &block_end,
                                        Cell &block_end_cell) {
     if (threadIdx.x == 0) {
@@ -358,14 +460,47 @@ __device__ void config1_process_vertex(QueryState &qs,
     config1_generate_and_merge_i_candidates(qs, scoring, query, query_len, graph,
                                             score, v, shared_i_ranges,
                                             shared_i_candidates, shared_i_valid,
-                                            shared_i_count, block_end,
+                                            shared_i_count, shared_warp_base,
+                                            shared_accum, block_end,
                                             block_end_cell);
+
+    // Sparsify stays on thread 0 (it merges into the shared scratchpad, where
+    // candidates collide by diagonal); only the densify that follows it is a
+    // filter+compaction the whole block can run.
+    if (threadIdx.x == 0) {
+        sp_reset(qs);
+        core_next_d_sparsify(qs, scoring, query_len, graph, score, v);
+    }
+    __syncthreads();
+    {
+        const Range d_range =
+            config1_densify(qs, Cell::Matrix::D, v, sc_d_wf(qs, score),
+                            sc_d_wf_size(qs, score), kScopeWavefrontCapacity,
+                            kCapScopeWavefront, true, shared_warp_base,
+                            shared_accum);
+        if (threadIdx.x == 0) {
+            sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), d_range);
+        }
+    }
+    __syncthreads();
 
     if (threadIdx.x == 0) {
         sp_reset(qs);
-        core_next_d(qs, scoring, query_len, graph, score, v);
-        sp_reset(qs);
-        core_next_m(qs, scoring, query_len, graph, score, v);
+        core_next_m_sparsify(qs, scoring, query_len, graph, score, v);
+    }
+    __syncthreads();
+    {
+        const Range m_range =
+            config1_densify(qs, Cell::Matrix::M, v, qs.bs_m_wf, qs.bs_m_wf_size,
+                            kBeyondScopeCapacity, kCapBeyondScope, false,
+                            shared_warp_base, shared_accum);
+        if (threadIdx.x == 0) {
+            sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), m_range);
+        }
+    }
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
         sp_reset(qs);
 
         const int32_t v_pos = vd_get_id(qs, v);
@@ -385,6 +520,37 @@ __device__ void config1_process_vertex(QueryState &qs,
     __syncthreads();
 }
 
+/**
+ * @brief Block-parallel vd_expand + vd_compact.
+ *
+ * Both walk the active vertices and touch only vertex `a`'s own segment arrays
+ * and sizes, so the vertices are independent and one thread can own each. The
+ * two passes are fused per vertex for the same reason: nothing vertex `a` reads
+ * is written by any other vertex. Neither pass changes vd_num_active, so the
+ * loop bound is stable.
+ */
+__device__ void config1_expand_and_compact(QueryState &qs,
+                                           int &shared_num_active) {
+    const int num_active = qs.vd_num_active;
+    const int g = qs.vd_gape;
+    for (int a = threadIdx.x; a < num_active; a += blockDim.x) {
+        vd_expand_vec(qs.vd_m_invalid[a], qs.vd_m_invalid_size[a], g, g);
+        vd_expand_vec(qs.vd_i_invalid[a], qs.vd_i_invalid_size[a], g, g);
+        vd_expand_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
+        qs.vd_m_invalid_size[a] =
+            vd_compact_vec(qs.vd_m_invalid[a], qs.vd_m_invalid_size[a], g, g);
+        qs.vd_i_invalid_size[a] =
+            vd_compact_vec(qs.vd_i_invalid[a], qs.vd_i_invalid_size[a], g, g);
+        qs.vd_d_invalid_size[a] =
+            vd_compact_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
+    }
+    __syncthreads();
+    if (threadIdx.x == 0) {
+        shared_num_active = vd_num_active_vertices(qs);
+    }
+    __syncthreads();
+}
+
 __device__ void config1_compute_new_wave(QueryState &qs,
                                          const AlignScoring &scoring,
                                          const char *query,
@@ -401,14 +567,11 @@ __device__ void config1_compute_new_wave(QueryState &qs,
                                          Cell *shared_i_candidates,
                                          int *shared_i_valid,
                                          int &shared_i_count,
+                                         int32_t *shared_warp_base,
+                                         int32_t &shared_accum,
                                          int &block_end,
                                          Cell &block_end_cell) {
-    if (threadIdx.x == 0) {
-        vd_expand(qs);
-        vd_compact(qs);
-        shared_num_active = vd_num_active_vertices(qs);
-    }
-    __syncthreads();
+    config1_expand_and_compact(qs, shared_num_active);
 
     for (int32_t l = 0; l < shared_num_active; ++l) {
         if (threadIdx.x == 0) {
@@ -420,8 +583,8 @@ __device__ void config1_compute_new_wave(QueryState &qs,
                                shared_range_end, shared_m_cells,
                                shared_m_valid, shared_i_ranges,
                                shared_i_candidates, shared_i_valid,
-                               shared_i_count, block_end,
-                               block_end_cell);
+                               shared_i_count, shared_warp_base, shared_accum,
+                               block_end, block_end_cell);
     }
 }
 
@@ -444,6 +607,8 @@ __device__ void align_one_config1(QueryState &qs, const AlignScoring &scoring,
                                   Cell *shared_i_candidates,
                                   int *shared_i_valid,
                                   int &shared_i_count,
+                                  int32_t *shared_warp_base,
+                                  int32_t &shared_accum,
                                   Cell &block_end_cell) {
     if (threadIdx.x == 0) {
         qs.capacity_exceeded = false;
@@ -510,6 +675,7 @@ __device__ void align_one_config1(QueryState &qs, const AlignScoring &scoring,
                                  shared_m_cells, shared_m_valid,
                                  shared_i_ranges, shared_i_candidates,
                                  shared_i_valid, shared_i_count,
+                                 shared_warp_base, shared_accum,
                                  block_end, block_end_cell);
 
         if (threadIdx.x == 0) {
@@ -558,6 +724,8 @@ __global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView
     __shared__ int64_t shared_range_end;
     __shared__ Config1ICandidateRanges shared_i_ranges;
     __shared__ int shared_i_count;
+    __shared__ int32_t shared_warp_base[kConfig1MaxWarps];
+    __shared__ int32_t shared_accum;
     __shared__ Cell block_end_cell;
 
     // One tile per staging buffer, sized at launch on blockDim.x. Cell first
@@ -591,7 +759,8 @@ __global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView
                       shared_num_active, shared_vertex, shared_range_start,
                       shared_range_end, shared_m_cells, shared_m_valid,
                       shared_i_ranges, shared_i_candidates, shared_i_valid,
-                      shared_i_count, block_end_cell);
+                      shared_i_count, shared_warp_base, shared_accum,
+                      block_end_cell);
 }
 
 /**
