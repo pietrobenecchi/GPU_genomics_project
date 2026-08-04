@@ -196,21 +196,15 @@ def run_config(
     threads: int | None,
     timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    command = [
-        str(binary),
-        "--backend",
-        "gpu",
-        "--gpu-config",
-        str(config),
-        "-g",
-        str(graph),
-        "-s",
-        str(queries),
-        "-f",
-        str(output),
-    ]
+    command = [str(binary), "--backend", "gpu"]
+    # Without this the backend falls back to the CPU when the kernel result is
+    # unusable and still writes correct alignments, so the GAF compares equal to
+    # the golden and the run looks like a pass.
+    command += ["--require-gpu-result"]
+    command += ["--gpu-config", str(config)]
     if threads is not None:
-        command[5:5] = ["--gpu-threads", str(threads)]
+        command += ["--gpu-threads", str(threads)]
+    command += ["-g", str(graph), "-s", str(queries), "-f", str(output)]
     return subprocess.run(command, capture_output=True, text=True, timeout=timeout)
 
 

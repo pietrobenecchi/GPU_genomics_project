@@ -217,7 +217,7 @@ __device__ void config1_generate_and_merge_i_candidates(
 
     if (threadIdx.x == 0) {
         if (shared_i_failed != 0) {
-            qs.capacity_exceeded = true;
+            cap_fail(qs, kCapIJumpStack, kMaxIJumpStack + 1, kMaxIJumpStack);
         } else {
             for (int32_t idx = 0; idx < shared_i_count; ++idx) {
                 if (shared_i_valid[idx] == 0) {

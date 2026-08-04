@@ -45,6 +45,9 @@ TheseusAlignerImpl::TheseusAlignerImpl(const Penalties &penalties,
     _vertices_data = std::make_unique<VerticesData>(penalties, n_scores, expected_nvertices);
     _qs = std::make_unique<QueryState>();
     _qs->capacity_exceeded = false;
+    _qs->cap_reason = kCapNone;
+    _qs->cap_required = 0;
+    _qs->cap_available = 0;
     sp_init(*_qs, -1024, 1024);
     sc_init(*_qs, n_scores);
     vd_init(*_qs, penalties.gapo(), penalties.gape(), n_scores, _graph._vertices.size());
@@ -65,6 +68,14 @@ gpu::DeviceGraph *TheseusAlignerImpl::device_graph() {
 
 int32_t TheseusAlignerImpl::graph_vertex_id(const std::string &name) {
     return static_cast<int32_t>(_graph.get_id(name));
+}
+
+int32_t TheseusAlignerImpl::max_vertex_length() const {
+    int32_t longest = 0;
+    for (size_t i = 0; i < _graph._vertices.size(); ++i) {
+        longest = std::max(longest, static_cast<int32_t>(_graph._vertices[i].value.size()));
+    }
+    return longest;
 }
 
 gpu::AlignResult TheseusAlignerImpl::last_align_result() const {
@@ -549,7 +560,7 @@ void TheseusAlignerImpl::store_I_jump(Graph::vertex* curr_v,
       Graph::vertex *new_v = &_graph._vertices[new_cell.vertex_id];
       if (new_v->value.size() == 0) {
         if (stack_size >= kMaxIJumpStack) {
-          _qs->capacity_exceeded = true;
+          cap_fail(*_qs, kCapIJumpStack, stack_size + 1, kMaxIJumpStack);
           continue;
         }
         stack[stack_size] = IJumpFrame{new_cell.vertex_id, _qs->bs_i_jumps_wf[pos_new_cell], frame.prev_pos, Cell::Matrix::IJumps, 0, false};

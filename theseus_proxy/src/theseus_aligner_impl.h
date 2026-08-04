@@ -105,6 +105,11 @@ public:
      */
     std::ptrdiff_t peak_wavefront_capacity() const { return _qs->sc_peak_wf; }
 
+    /** @brief Which fixed buffer ran out first, and the entries it wanted vs had. */
+    int8_t  capacity_reason() const { return _qs->cap_reason; }
+    int32_t capacity_required() const { return _qs->cap_required; }
+    int32_t capacity_available() const { return _qs->cap_available; }
+
     /**
      * @brief The graph in device memory, uploaded on first use.
      *
@@ -121,6 +126,9 @@ public:
      * numeric vertex ids; graph names stay on the host for parsing and output.
      */
     int32_t graph_vertex_id(const std::string &name);
+
+    /** @brief Longest vertex sequence in the graph; half of the ScratchPad bound. */
+    int32_t max_vertex_length() const;
 
     /**
      * @brief POD copy of internal penalties for the CUDA backend.

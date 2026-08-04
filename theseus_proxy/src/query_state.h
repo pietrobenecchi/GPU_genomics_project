@@ -61,12 +61,30 @@ namespace theseus {
 /**
  * @brief Diagonals the flattened ScratchPad wavefront is built to hold.
  *
- * The CPU ScratchPad defaults to the window [-1024, 1024] and only ever grows it,
- * so on the sample data (where it never grows) this span reproduces its indexing
- * exactly. PROVISIONAL: a real bound comes from max query length and max vertex
- * length, not from this dataset.
+ * Derived, not guessed. `extend_diagonal` computes j = diag + offset, where j
+ * indexes a vertex sequence and offset indexes the query, so
+ *
+ *     diag in [-max_query_len, max_vertex_len]
+ *     span  = max_vertex_len + max_query_len + 1
+ *
+ * `new_alignment` already computes exactly that window and calls sp_init with
+ * it; this constant is the compile-time ceiling that window may reach. It must
+ * cover the largest graph in the validation set, which is what the numbers below
+ * are measured from (100 bp GGBS reads):
+ *
+ *     graph   segments   longest vertex   span needed
+ *     ebola          7            9 063         9 164
+ *     c4            16           52 006        52 107
+ *
+ * Growing this grows QueryState by 28 bytes per diagonal (a Cell plus its entry
+ * in the active-diagonal list), and one QueryState is allocated per query, so it
+ * trades directly against batch size in device memory: at this value QueryState
+ * is 4.2 MB and a 512-query batch needs 2.1 GB. A graph with longer vertices
+ * (MHC, yeast) will need a larger value, or a sparse ScratchPad instead of this
+ * dense one. Overflow is never silent: align_batch_gpu reports the required
+ * span before launching, and sp_init records it through cap_fail.
  */
-constexpr int kScratchpadSpan = 2049;  // covers diagonals [-1024, 1024]
+constexpr int kScratchpadSpan = 52224;  // covers c4's 52 006 bp vertex + 100 bp reads
 
 /**
  * @brief Cells each accumulating backtrace wavefront (BeyondScope) is built to
@@ -208,7 +226,67 @@ struct QueryState {
     // Set true the first time any fixed capacity above is too small. Checked by
     // the host after an alignment; never silently ignored.
     bool capacity_exceeded;
+
+    // Which buffer ran out first, and by how much. A bare boolean told you an
+    // overflow happened somewhere among fourteen call sites, which is not enough
+    // to size anything: these say which one and what it wanted. Only the FIRST
+    // overflow is recorded, because later ones are usually consequences of it.
+    int8_t  cap_reason;    // a CapBuffer value
+    int32_t cap_required;  // entries the caller asked for
+    int32_t cap_available; // entries the buffer has
 };
+
+/**
+ * @brief Which fixed-capacity buffer overflowed. Values are stable: they are
+ * copied back from the device and printed by the host.
+ */
+enum CapBuffer : int8_t {
+    kCapNone = 0,
+    kCapScratchpadSpan,   // ScratchPad diagonal window
+    kCapScratchpadDiags,  // ScratchPad active-diagonal list
+    kCapBeyondScope,      // accumulating backtrace wavefronts
+    kCapScores,           // Scope ring length
+    kCapScopeWavefront,   // per-score I/D wavefront cells
+    kCapScopePos,         // per-score M/I/D position ranges
+    kCapVertices,         // vertex -> active-index map domain
+    kCapActiveVertices,   // vertices touched in one alignment
+    kCapInvalidSegments,  // invalid-diagonal segments per matrix per vertex
+    kCapJumpsPerScore,    // jump positions per vertex per score
+    kCapIJumpStack,       // explicit stack depth in store_I_jump
+};
+
+/**
+ * @brief Record an overflow: set the flag, and keep the first cause.
+ */
+THESEUS_HD inline void cap_fail(QueryState &qs, CapBuffer which, int32_t required,
+                                int32_t available) {
+    qs.capacity_exceeded = true;
+    if (qs.cap_reason == kCapNone) {
+        qs.cap_reason = which;
+        qs.cap_required = required;
+        qs.cap_available = available;
+    }
+}
+
+/**
+ * @brief Name of the buffer @p reason refers to, for host-side messages.
+ */
+inline const char *cap_buffer_name(int8_t reason) {
+    switch (reason) {
+        case kCapScratchpadSpan:  return "scratchpad diagonal span";
+        case kCapScratchpadDiags: return "scratchpad active-diagonal list";
+        case kCapBeyondScope:     return "beyond-scope wavefront";
+        case kCapScores:          return "scope ring length";
+        case kCapScopeWavefront:  return "scope wavefront cells";
+        case kCapScopePos:        return "scope position ranges";
+        case kCapVertices:        return "vertex index map";
+        case kCapActiveVertices:  return "active vertices";
+        case kCapInvalidSegments: return "invalid segments";
+        case kCapJumpsPerScore:   return "jumps per score";
+        case kCapIJumpStack:      return "I-jump stack";
+        default:                  return "none";
+    }
+}
 
 /**
  * @brief Put the ScratchPad window at [min_diag, max_diag] and clear it.
@@ -226,7 +304,7 @@ THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
 
     const int span = max_diag - min_diag + 1;
     if (span > kScratchpadSpan) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScratchpadSpan, span, kScratchpadSpan);
         return;
     }
     for (int i = 0; i < span; ++i) {
@@ -240,7 +318,7 @@ THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
 THESEUS_HD inline Cell &sp_at(QueryState &qs, int diag) {
     const int idx = diag - qs.sp_min_diag;
     if (idx < 0 || idx >= kScratchpadSpan) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScratchpadSpan, idx < 0 ? -idx : idx + 1, kScratchpadSpan);
         qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
         return qs.sp_overflow_cell;
     }
@@ -256,13 +334,13 @@ THESEUS_HD inline Cell &sp_at(QueryState &qs, int diag) {
 THESEUS_HD inline Cell &sp_access_alloc(QueryState &qs, int diag) {
     const int idx = diag - qs.sp_min_diag;
     if (idx < 0 || idx >= kScratchpadSpan) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScratchpadSpan, idx < 0 ? -idx : idx + 1, kScratchpadSpan);
         qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
         return qs.sp_overflow_cell;
     }
     if (qs.sp_wf[idx].offset == -1) {
         if (qs.sp_ndiags >= kScratchpadSpan) {
-            qs.capacity_exceeded = true;
+            cap_fail(qs, kCapScratchpadDiags, qs.sp_ndiags + 1, kScratchpadSpan);
             qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
             return qs.sp_overflow_cell;
         }
@@ -303,7 +381,7 @@ THESEUS_HD inline void bs_new_alignment(QueryState &qs) {
 THESEUS_HD inline int32_t bs_push_back(QueryState &qs, Cell *wf, int32_t &size,
                             const Cell &c) {
     if (size >= kBeyondScopeCapacity) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapBeyondScope, size + 1, kBeyondScopeCapacity);
         return (size > 0) ? size - 1 : 0;
     }
     const int32_t pos = size;
@@ -321,7 +399,7 @@ THESEUS_HD inline int32_t bs_push_back(QueryState &qs, Cell *wf, int32_t &size,
  */
 THESEUS_HD inline void sc_init(QueryState &qs, int nscores) {
     if (nscores > kMaxScores) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScores, nscores, kMaxScores);
         nscores = kMaxScores;
     }
     qs.sc_nscores = nscores;
@@ -380,7 +458,7 @@ THESEUS_HD inline int32_t &sc_d_pos_size(QueryState &qs, int score) { return qs.
  */
 THESEUS_HD inline void sc_wf_push(QueryState &qs, Cell *wf, int32_t &size, const Cell &c) {
     if (size >= kScopeWavefrontCapacity) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScopeWavefront, size + 1, kScopeWavefrontCapacity);
         return;
     }
     wf[size] = c;
@@ -395,7 +473,7 @@ THESEUS_HD inline void sc_wf_push(QueryState &qs, Cell *wf, int32_t &size, const
  */
 THESEUS_HD inline void sc_pos_push(QueryState &qs, Range *pos, int32_t &size, const Range &r) {
     if (size >= kScopePosCapacity) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapScopePos, size + 1, kScopePosCapacity);
         return;
     }
     pos[size] = r;
@@ -419,7 +497,7 @@ THESEUS_HD inline void vd_init(QueryState &qs, int gapo, int gape, int nscores,
     qs.vd_num_vertices = num_vertices;
     qs.vd_num_active = 0;
     if (num_vertices > kMaxVertices) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapVertices, num_vertices, kMaxVertices);
     }
     int n = num_vertices;
     if (n > kMaxVertices) {
@@ -455,7 +533,7 @@ THESEUS_HD inline int vd_num_active_vertices(const QueryState &qs) { return qs.v
  */
 THESEUS_HD inline void vd_activate_vertex(QueryState &qs, int vtx) {
     if (vtx >= kMaxVertices) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapVertices, vtx + 1, kMaxVertices);
         return;
     }
     if (qs.vd_vertex_to_idx[vtx] != -1) {
@@ -463,7 +541,7 @@ THESEUS_HD inline void vd_activate_vertex(QueryState &qs, int vtx) {
     }
     const int idx = qs.vd_num_active;
     if (idx >= kMaxActiveVertices) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapActiveVertices, idx + 1, kMaxActiveVertices);
         return;
     }
     qs.vd_vertex_id[idx] = vtx;
@@ -577,7 +655,7 @@ THESEUS_HD inline void vd_compact(QueryState &qs) {
 THESEUS_HD inline void vd_invalid_push(QueryState &qs, InvalidSeg *v, int32_t &size,
                             const InvalidSeg &s) {
     if (size >= kMaxInvalidSegments) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapInvalidSegments, size + 1, kMaxInvalidSegments);
         return;
     }
     v[size] = s;
@@ -673,7 +751,7 @@ THESEUS_HD inline int32_t &vd_i_jumps_size(QueryState &qs, int vtx, int pos) { r
 
 THESEUS_HD inline void vd_jumps_push(QueryState &qs, int64_t *arr, int32_t &size, int64_t val) {
     if (size >= kMaxJumpsPerScore) {
-        qs.capacity_exceeded = true;
+        cap_fail(qs, kCapJumpsPerScore, size + 1, kMaxJumpsPerScore);
         return;
     }
     arr[size] = val;

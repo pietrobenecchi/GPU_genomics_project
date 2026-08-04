@@ -51,6 +51,16 @@ namespace theseus
     class TheseusAlignerImpl; // Forward declaration of the implementation class.
 
     /**
+     * @brief Diagonals one query's flattened ScratchPad can hold.
+     *
+     * A batch needs `max_vertex_length + max_query_length + 1` of these; anything
+     * more overflows and the alignment cannot run on the device. Exposed so
+     * callers can size a batch, and so tests can build an input that is certain
+     * to exceed it without hard-coding the value.
+     */
+    int scratchpad_span();
+
+    /**
      * @brief What the GPU backend actually did with a batch.
      *
      * The backend silently falls back to the CPU whenever it cannot do the work,
@@ -60,6 +70,10 @@ namespace theseus
     {
         bool device_used = false;        // A CUDA kernel ran on this batch
         bool aligned_on_device = false;  // The alignment itself ran on the device
+        // The returned alignments were reconstructed from the device QueryState.
+        // False means the kernel ran but its result was unusable and these are
+        // the CPU's alignments: correct output, but no evidence about the kernel.
+        bool result_from_device = false;
         // The wavefronts outgrew their fixed capacity. Harmless on the CPU, which
         // reallocates, but it means this data cannot run on a device buffer yet.
         bool wavefront_capacity_exceeded = false;
@@ -67,6 +81,12 @@ namespace theseus
         // BeyondScope wavefronts, ...) was too small. Same meaning as
         // wavefront_capacity_exceeded for those device-shaped buffers.
         bool query_state_capacity_exceeded = false;
+        // Diagonals this batch needs versus the diagonals a QueryState holds,
+        // filled in before the kernel launches when the batch cannot fit. Zero
+        // means the batch fits. Derived from the graph and the queries, so it
+        // says what to raise kScratchpadSpan to rather than only that it is low.
+        int scratchpad_span_required = 0;
+        int scratchpad_span_available = 0;
         int gpu_config = 0;
         int gpu_threads_per_block = 128;
         float graph_ms = 0.0f;

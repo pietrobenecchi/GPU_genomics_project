@@ -35,6 +35,8 @@
 
 namespace theseus {
 
+int scratchpad_span() { return kScratchpadSpan; }
+
 TheseusAligner::TheseusAligner(const Penalties &penalties,
                                std::istream &gfa_stream)
 {
@@ -171,6 +173,25 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     int gpu_config,
     int gpu_threads_per_block) {
 
+    // Pre-flight the one bound that is derivable rather than measured.
+    // extend_diagonal computes j = diag + offset with j indexing a vertex and
+    // offset indexing the query, so diag lives in [-max_query, max_vertex] and
+    // the ScratchPad needs max_vertex + max_query + 1 diagonals. Checking it here
+    // turns "the kernel came back empty" into a number the caller can act on.
+    if (report != nullptr && !seqs.empty()) {
+        size_t max_query = 0;
+        for (const auto &seq : seqs) {
+            max_query = std::max(max_query, seq.size());
+        }
+        const long required =
+            static_cast<long>(aligner_impl_->max_vertex_length()) +
+            static_cast<long>(max_query) + 1;
+        if (required > kScratchpadSpan) {
+            report->scratchpad_span_required = static_cast<int>(required);
+            report->scratchpad_span_available = kScratchpadSpan;
+        }
+    }
+
     // Flatten into the concatenated layout the device consumes. This is built
     // even though the alignment still happens on the CPU, so that the upload
     // path is exercised by every GPU run rather than only once the kernel lands.
@@ -281,6 +302,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
                 seqs[i], start_offsets[i], device_states[i], device_results[i]));
         }
         if (report != nullptr) {
+            report->result_from_device = true;
             report->message += "; GAF reconstructed from GPU QueryState with host backtrace";
             report->message += "; timing_ms h2d=" + std::to_string(report->h2d_ms) +
                                " kernel=" + std::to_string(report->kernel_ms) +
@@ -296,18 +318,27 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     // fixed, so an overflow would have meant a device buffer read or write past
     // its end. Checked after aligning, not before: the buffers only fill while
     // the algorithm runs.
+    if (report != nullptr && report->scratchpad_span_required > 0) {
+        report->message += "; SCRATCHPAD TOO SMALL FOR THIS BATCH: needs " +
+                           std::to_string(report->scratchpad_span_required) +
+                           " diagonals, kScratchpadSpan is " +
+                           std::to_string(report->scratchpad_span_available);
+    }
+
     if (report != nullptr && aligner_impl_->query_state_capacity_exceeded()) {
         report->query_state_capacity_exceeded = true;
         report->wavefront_capacity_exceeded = true;  // same underlying cause
+        // Name the buffer that ran out first and what it wanted. Listing every
+        // capacity told you nothing about which one was the problem.
         report->message +=
-            "; QUERYSTATE CAPACITY EXCEEDED, a fixed buffer was too small "
-            "(scratchpad span " + std::to_string(kScratchpadSpan) +
-            ", beyond-scope " + std::to_string(kBeyondScopeCapacity) +
-            ", scope wavefront " + std::to_string(kScopeWavefrontCapacity) +
-            "); peak per-score wavefront was " +
+            std::string("; QUERYSTATE CAPACITY EXCEEDED: ") +
+            cap_buffer_name(aligner_impl_->capacity_reason()) + " needed " +
+            std::to_string(aligner_impl_->capacity_required()) + ", has " +
+            std::to_string(aligner_impl_->capacity_available()) +
+            "; peak per-score wavefront was " +
             std::to_string(aligner_impl_->peak_wavefront_capacity()) +
-            " cells; the GPU port needs real bounds before this data can run on "
-            "device";
+            " cells; raise the matching bound in query_state.h before this data "
+            "can run on device";
     }
 
     return alignments;

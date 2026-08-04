@@ -17,6 +17,15 @@ theseus_proxy/external_datasets/
 # under golden/ are tracked; these are just the outputs being compared to them.
 theseus_proxy/data/validation/ggbs/gpu_results/
 
+# Agent instruction and handoff documents. Kept out of the repository on
+# purpose: they are working notes addressed to a tool, not project source.
+CLAUDE.md
+HANDOFF.md
+GPU_PORT_PROMPT.md
+**/GPU_PORT_PROMPT.md
+theseus_proxy/docs/gpu_agent_handoff.md
+.claude/
+
 __pycache__/
 **/__pycache__/
 *.pyc

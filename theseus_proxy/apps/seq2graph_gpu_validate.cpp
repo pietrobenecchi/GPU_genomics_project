@@ -104,7 +104,11 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
 }
 
 bool run_workspace_case(bool require_device, int gpu_config) {
-  constexpr int kLong = 2050;
+  // The point of this case is that an overflow is detected and reported, so the
+  // input has to exceed whatever the current capacity is rather than a value
+  // that happened to exceed it once. A vertex and a query of this length need
+  // 2 * span + 1 diagonals, which cannot fit in span.
+  const int kLong = theseus::scratchpad_span();
   std::stringstream graph_cpu(long_graph_text(kLong));
   std::stringstream graph_gpu(long_graph_text(kLong));
   theseus::Penalties penalties(0, 2, 3, 1);

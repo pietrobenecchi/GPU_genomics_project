@@ -186,7 +186,7 @@ THESEUS_HD inline void core_store_i_jump(QueryState &qs, const GraphCsrView &gra
                           vd_i_jumps_size(qs, new_cell.vertex_id, pos_score), pos_new_cell);
             if (vertex_len(graph, new_cell.vertex_id) == 0) {
                 if (stack_size >= kMaxIJumpStack) {
-                    qs.capacity_exceeded = true;
+                    cap_fail(qs, kCapIJumpStack, stack_size + 1, kMaxIJumpStack);
                     continue;
                 }
                 stack[stack_size] = Frame{new_cell.vertex_id, qs.bs_i_jumps_wf[pos_new_cell],

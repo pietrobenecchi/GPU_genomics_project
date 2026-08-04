@@ -24,6 +24,7 @@ struct CmdArgs {
   Backend backend = Backend::Cpu;
   int gpu_config = 0;
   int gpu_threads = 128;
+  bool require_gpu_result = false;
 };
 
 // Sequences to align, together with where each one starts in the graph.
@@ -46,7 +47,11 @@ void help() {
       << "  -f, --output_file <file>     Output GAF path (required)\n"
       << "  -b, --backend <cpu|gpu>      Alignment backend (default cpu)\n"
       << "      --gpu-config <0|1>       GPU configuration (default 0)\n"
-      << "      --gpu-threads <64|128|256> Threads per GPU block (default 128)\n";
+      << "      --gpu-threads <64|128|256> Threads per GPU block (default 128)\n"
+      << "      --require-gpu-result     Fail unless the output came from the GPU\n"
+      << "                               kernel. Without it a kernel that produced\n"
+      << "                               nothing still writes the CPU's alignments,\n"
+      << "                               which compare equal to a CPU golden.\n";
 }
 
 CmdArgs parse_args(int argc, char *const *argv) {
@@ -61,6 +66,7 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"backend", required_argument, nullptr, 'b'},
       {"gpu-config", required_argument, nullptr, 1000},
       {"gpu-threads", required_argument, nullptr, 1001},
+      {"require-gpu-result", no_argument, nullptr, 1002},
       {nullptr, 0, nullptr, 0}};
 
   CmdArgs args;
@@ -109,6 +115,9 @@ CmdArgs parse_args(int argc, char *const *argv) {
                     << " (expected 0 or 1)\n";
           std::exit(1);
         }
+        break;
+      case 1002:
+        args.require_gpu_result = true;
         break;
       case 1001:
         args.gpu_threads = std::stoi(optarg);
@@ -202,8 +211,9 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
  * The backend falls back to the CPU when it cannot do the work, so the status it
  * reports is written to stderr rather than assumed.
  */
-void run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
-             std::ostream &out_stream, int gpu_config, int gpu_threads) {
+bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
+             std::ostream &out_stream, int gpu_config, int gpu_threads,
+             bool require_gpu_result) {
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
       inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
@@ -215,6 +225,17 @@ void run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
   }
 
   std::cerr << "GPU backend: " << report.message << "\n";
+
+  // The output above is correct either way, because the backend falls back to
+  // the CPU when the kernel result is unusable. That makes a byte comparison
+  // against a CPU golden pass without the kernel having contributed anything,
+  // so when the caller asks for a GPU result, say so explicitly.
+  if (require_gpu_result && !report.result_from_device) {
+    std::cerr << "GPU RESULT REQUIRED BUT NOT PRODUCED: the alignments written "
+                 "are the CPU's, not the kernel's.\n";
+    return false;
+  }
+  return true;
 }
 
 int main(int argc, char *const *argv) {
@@ -253,8 +274,10 @@ int main(int argc, char *const *argv) {
 
   auto start = std::chrono::steady_clock::now();
 
+  bool gpu_ok = true;
   if (args.backend == Backend::Gpu) {
-    run_gpu(aligner, inputs, output_file, args.gpu_config, args.gpu_threads);
+    gpu_ok = run_gpu(aligner, inputs, output_file, args.gpu_config,
+                     args.gpu_threads, args.require_gpu_result);
   } else {
     run_cpu(aligner, inputs, output_file);
   }
@@ -266,5 +289,5 @@ int main(int argc, char *const *argv) {
             << micros << " microseconds on "
             << (args.backend == Backend::Gpu ? "gpu" : "cpu") << "\n";
 
-  return 0;
+  return gpu_ok ? 0 : 2;
 }
