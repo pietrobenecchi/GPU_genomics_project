@@ -41,6 +41,38 @@ size_t kernel_shared_bytes(int32_t threads_per_block) {
            (sizeof(Cell) + 2 * sizeof(int));
 }
 
+/**
+ * @brief One contiguous run of candidates a sparsify half folds into the
+ * ScratchPad, described so that any thread can rebuild candidate @p l alone.
+ *
+ * The three core_sparsify_* helpers differ only in where the source index comes
+ * from and whether they overwrite prev_pos/from_matrix, so one description
+ * covers all of them:
+ *
+ *   core_sparsify_indel  dense run, keeps the source cell's prev_pos/from_matrix
+ *   core_sparsify_m      dense run, rewrites them to (absolute index, M)
+ *   core_sparsify_jumps  indirect run through a jump-position list, rewrites them
+ */
+struct SparsifyPart {
+    const Cell *wf;            // source wavefront
+    const int64_t *positions;  // jump positions, null for a dense run
+    int64_t start;             // first index of a dense run
+    int32_t count;
+    int32_t offset_increase;
+    int32_t shift_factor;
+    bool rewrite_prev;
+    Cell::Matrix from_matrix;
+};
+
+/** @brief The runs one sparsify half visits, in the order it visits them. */
+struct SparsifyPlan {
+    SparsifyPart parts[4];
+    int32_t nparts;
+    int32_t total;
+    int32_t query_len;
+    int32_t upper_bound;
+};
+
 struct ICandidateRanges {
     Range i_dense;
     int32_t i_jumps_size;
@@ -331,6 +363,140 @@ __device__ void merge_candidate_tile(QueryState &qs,
     __syncthreads();
 }
 
+__device__ void plan_add(SparsifyPlan &plan, const Cell *wf,
+                         const int64_t *positions, int64_t start, int32_t count,
+                         int32_t offset_increase, int32_t shift_factor,
+                         bool rewrite_prev, Cell::Matrix from_matrix) {
+    if (count <= 0) {
+        return;   // an empty run contributes nothing and no index space
+    }
+    SparsifyPart &part = plan.parts[plan.nparts];
+    part.wf = wf;
+    part.positions = positions;
+    part.start = start;
+    part.count = count;
+    part.offset_increase = offset_increase;
+    part.shift_factor = shift_factor;
+    part.rewrite_prev = rewrite_prev;
+    part.from_matrix = from_matrix;
+    ++plan.nparts;
+    plan.total += count;
+}
+
+/**
+ * @brief The runs core_next_d_sparsify walks, in its order.
+ *
+ * Mirrors that function exactly, including that pos_prev_m_scope is computed
+ * before the sign test and only used inside it.
+ */
+__device__ SparsifyPlan prepare_d_sparsify_plan(QueryState &qs,
+                                                const AlignScoring &scoring,
+                                                int32_t query_len,
+                                                const GraphCsrView &graph,
+                                                int32_t score, int32_t v) {
+    SparsifyPlan plan;
+    plan.nparts = 0;
+    plan.total = 0;
+    plan.query_len = query_len;
+    plan.upper_bound = vertex_len(graph, v);
+
+    const int32_t pos_prev_m = score - (scoring.gapo + scoring.gape);
+    const int32_t pos_prev_d = score - scoring.gape;
+    const int32_t pos_prev_m_scope = vd_get_pos(qs, pos_prev_m);
+    const int32_t v_id = vd_get_id(qs, v);
+
+    if (pos_prev_d >= 0 && sc_d_pos_size(qs, pos_prev_d) > v_id) {
+        const Range r = sc_d_pos(qs, pos_prev_d)[v_id];
+        plan_add(plan, sc_d_wf(qs, pos_prev_d), nullptr, r.start,
+                 static_cast<int32_t>(r.end - r.start), 1, -1, false,
+                 Cell::Matrix::None);
+    }
+    if (pos_prev_m >= 0) {
+        if (sc_m_pos_size(qs, pos_prev_m) > v_id) {
+            const Range r = sc_m_pos(qs, pos_prev_m)[v_id];
+            plan_add(plan, qs.bs_m_wf, nullptr, r.start,
+                     static_cast<int32_t>(r.end - r.start), 1, -1, true,
+                     Cell::Matrix::M);
+        }
+        plan_add(plan, qs.bs_m_jumps_wf, vd_m_jumps(qs, v, pos_prev_m_scope), 0,
+                 vd_m_jumps_size(qs, v, pos_prev_m_scope), 1, -1, true,
+                 Cell::Matrix::MJumps);
+    }
+    return plan;
+}
+
+/** @brief The runs core_next_m_sparsify walks, in its order. */
+__device__ SparsifyPlan prepare_m_sparsify_plan(QueryState &qs,
+                                                const AlignScoring &scoring,
+                                                int32_t query_len,
+                                                const GraphCsrView &graph,
+                                                int32_t score, int32_t v) {
+    SparsifyPlan plan;
+    plan.nparts = 0;
+    plan.total = 0;
+    plan.query_len = query_len;
+    plan.upper_bound = vertex_len(graph, v);
+
+    const int32_t pos_prev_m = score - scoring.mism;
+    const int32_t pos_prev_m_scope = vd_get_pos(qs, pos_prev_m);
+    const int32_t v_id = vd_get_id(qs, v);
+
+    if (sc_d_pos_size(qs, score) > v_id) {
+        const Range r = sc_d_pos(qs, score)[v_id];
+        plan_add(plan, sc_d_wf(qs, score), nullptr, r.start,
+                 static_cast<int32_t>(r.end - r.start), 0, 0, false,
+                 Cell::Matrix::None);
+    }
+    if (sc_i_pos_size(qs, score) > v_id) {
+        const Range r = sc_i_pos(qs, score)[v_id];
+        plan_add(plan, sc_i_wf(qs, score), nullptr, r.start,
+                 static_cast<int32_t>(r.end - r.start), 0, 0, false,
+                 Cell::Matrix::None);
+    }
+    if (pos_prev_m >= 0) {
+        if (sc_m_pos_size(qs, pos_prev_m) > v_id) {
+            const Range r = sc_m_pos(qs, pos_prev_m)[v_id];
+            plan_add(plan, qs.bs_m_wf, nullptr, r.start,
+                     static_cast<int32_t>(r.end - r.start), 1, 0, true,
+                     Cell::Matrix::M);
+        }
+        plan_add(plan, qs.bs_m_jumps_wf, vd_m_jumps(qs, v, pos_prev_m_scope), 0,
+                 vd_m_jumps_size(qs, v, pos_prev_m_scope), 1, 0, true,
+                 Cell::Matrix::MJumps);
+    }
+    return plan;
+}
+
+/**
+ * @brief Rebuild candidate @p idx of a plan, and say whether it passes the
+ * filter every core_sparsify_* applies before touching the ScratchPad.
+ */
+__device__ bool make_sparsify_candidate(const SparsifyPlan &plan, int32_t idx,
+                                        Cell &out) {
+    int32_t local = idx;
+    for (int32_t p = 0; p < plan.nparts; ++p) {
+        const SparsifyPart &part = plan.parts[p];
+        if (local < part.count) {
+            const int64_t pos =
+                part.positions != nullptr ? part.positions[local]
+                                          : part.start + local;
+            Cell cell = part.wf[pos];
+            if (part.rewrite_prev) {
+                cell.prev_pos = pos;
+                cell.from_matrix = part.from_matrix;
+            }
+            cell.diag += part.shift_factor;
+            cell.offset += part.offset_increase;
+            out = cell;
+            const int32_t new_col = cell.offset + cell.diag;
+            return cell.offset <= plan.query_len && new_col <= plan.upper_bound;
+        }
+        local -= part.count;
+    }
+    out = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+    return false;
+}
+
 /**
  * @brief Block-wide max, returned to every thread.
  *
@@ -472,6 +638,43 @@ __device__ void sp_reset_block(QueryState &qs) {
         qs.sp_ndiags = 0;
     }
     __syncthreads();
+}
+
+/**
+ * @brief Fold a whole sparsify plan into the ScratchPad, one tile at a time.
+ *
+ * Tiled for the same reason the I candidates are: the staging buffers are sized
+ * on the block, not on the candidate space, and the ScratchPad state carries
+ * over from one tile to the next so the index order across tiles is preserved.
+ *
+ * Every thread of the block must call it: it contains barriers.
+ */
+__device__ void run_sparsify_plan(QueryState &qs, const SparsifyPlan &plan,
+                                  Cell *shared_cells, int *shared_valid,
+                                  int32_t *shared_warp_base,
+                                  int32_t &shared_accum) {
+    const int32_t tile = static_cast<int32_t>(blockDim.x);
+    // Uniform: the plan lives in shared memory, written by thread 0 before the
+    // barrier that got us here.
+    const int32_t count = plan.total;
+
+    for (int32_t tile_start = 0; tile_start < count; tile_start += tile) {
+        const int32_t idx = tile_start + static_cast<int32_t>(threadIdx.x);
+        if (idx < count) {
+            Cell candidate{-1, -1, -1, -1, Cell::Matrix::None};
+            const bool valid = make_sparsify_candidate(plan, idx, candidate);
+            shared_cells[threadIdx.x] = candidate;
+            shared_valid[threadIdx.x] = valid ? 1 : 0;
+        } else {
+            shared_valid[threadIdx.x] = 0;
+        }
+        __syncthreads();
+
+        const int32_t remaining = count - tile_start;
+        const int32_t lanes = remaining < tile ? remaining : tile;
+        merge_candidate_tile(qs, shared_cells, shared_valid, lanes,
+                             shared_warp_base, shared_accum);
+    }
 }
 
 __device__ Range finish_i_wavefront(QueryState &qs, int32_t score,
@@ -632,6 +835,7 @@ __device__ void process_vertex(QueryState &qs,
                                int64_t &shared_range_end,
                                int *shared_m_valid,
                                ICandidateRanges &shared_i_ranges,
+                               SparsifyPlan &shared_sparsify_plan,
                                Cell *shared_i_candidates,
                                int *shared_i_valid,
                                int &shared_i_count,
@@ -658,9 +862,12 @@ __device__ void process_vertex(QueryState &qs,
     // after it are both block-wide.
     sp_reset_block(qs);
     if (threadIdx.x == 0) {
-        core_next_d_sparsify(qs, scoring, query_len, graph, score, v);
+        shared_sparsify_plan =
+            prepare_d_sparsify_plan(qs, scoring, query_len, graph, score, v);
     }
     __syncthreads();
+    run_sparsify_plan(qs, shared_sparsify_plan, shared_i_candidates,
+                      shared_i_valid, shared_warp_base, shared_accum);
     {
         const Range d_range =
             densify(qs, Cell::Matrix::D, v, sc_d_wf(qs, score),
@@ -751,6 +958,7 @@ __device__ void compute_new_wave(QueryState &qs,
                                  int64_t &shared_range_end,
                                  int *shared_m_valid,
                                  ICandidateRanges &shared_i_ranges,
+                                 SparsifyPlan &shared_sparsify_plan,
                                  Cell *shared_i_candidates,
                                  int *shared_i_valid,
                                  int &shared_i_count,
@@ -768,6 +976,7 @@ __device__ void compute_new_wave(QueryState &qs,
         process_vertex(qs, scoring, query, query_len, graph, score,
                        shared_vertex, shared_range_start,
                        shared_range_end, shared_m_valid, shared_i_ranges,
+                       shared_sparsify_plan,
                        shared_i_candidates, shared_i_valid,
                        shared_i_count, shared_warp_base, shared_accum,
                        block_end, block_end_cell);
@@ -789,6 +998,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int64_t &shared_range_end,
                           int *shared_m_valid,
                           ICandidateRanges &shared_i_ranges,
+                          SparsifyPlan &shared_sparsify_plan,
                           Cell *shared_i_candidates,
                           int *shared_i_valid,
                           int &shared_i_count,
@@ -888,7 +1098,8 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                          block_score, shared_num_active, shared_vertex,
                          shared_range_start, shared_range_end,
                          shared_m_valid,
-                         shared_i_ranges, shared_i_candidates,
+                         shared_i_ranges, shared_sparsify_plan,
+                         shared_i_candidates,
                          shared_i_valid, shared_i_count,
                          shared_warp_base, shared_accum,
                          block_end, block_end_cell);
@@ -950,6 +1161,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
     __shared__ int64_t shared_range_start;
     __shared__ int64_t shared_range_end;
     __shared__ ICandidateRanges shared_i_ranges;
+    __shared__ SparsifyPlan shared_sparsify_plan;
     __shared__ int shared_i_count;
     __shared__ int32_t shared_warp_base[kMaxWarps];
     __shared__ int32_t shared_accum;
@@ -985,7 +1197,8 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
               results[query_id], block_continue, block_end, block_score,
               shared_num_active, shared_vertex, shared_range_start,
               shared_range_end, shared_m_valid,
-              shared_i_ranges, shared_i_candidates, shared_i_valid,
+              shared_i_ranges, shared_sparsify_plan, shared_i_candidates,
+              shared_i_valid,
               shared_i_count, shared_warp_base, shared_accum, shared_span,
               block_end_cell);
 }
