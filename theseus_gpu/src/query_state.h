@@ -508,11 +508,25 @@ THESEUS_HD inline int32_t vd_min(int32_t a, int32_t b) { return a < b ? a : b; }
 THESEUS_HD inline int32_t vd_max(int32_t a, int32_t b) { return a > b ? a : b; }
 
 /**
- * @brief Set the penalties, ring length and graph size the vertices data works
- * with, and empty it. @p num_vertices is the domain of the vertex->index map.
+ * @brief How many entries of vd_vertex_to_idx a graph of @p num_vertices owns.
+ *
+ * The one place the clamp to kMaxVertices lives, so the scalar halves below and
+ * the block-parallel fill in the kernel cannot disagree on the bound.
  */
-THESEUS_HD inline void vd_init(QueryState &qs, int gapo, int gape, int nscores,
-                    int num_vertices) {
+THESEUS_HD inline int vd_map_fill_count(int num_vertices) {
+    return num_vertices > kMaxVertices ? kMaxVertices : num_vertices;
+}
+
+/**
+ * @brief The scalar half of vd_init: penalties, ring length, graph size and the
+ * capacity check. Returns how many entries of vd_vertex_to_idx the caller still
+ * has to set to -1.
+ *
+ * Split out for the same reason as sp_init_window: the clearing loop is
+ * independent per entry, so the GPU runs it across the block.
+ */
+THESEUS_HD inline int vd_init_scalar(QueryState &qs, int gapo, int gape, int nscores,
+                                     int num_vertices) {
     qs.vd_gapo = gapo;
     qs.vd_gape = gape;
     qs.vd_nscores = nscores;
@@ -521,24 +535,32 @@ THESEUS_HD inline void vd_init(QueryState &qs, int gapo, int gape, int nscores,
     if (num_vertices > kMaxVertices) {
         cap_fail(qs, kCapVertices, num_vertices, kMaxVertices);
     }
-    int n = num_vertices;
-    if (n > kMaxVertices) {
-        n = kMaxVertices;
-    }
+    return vd_map_fill_count(num_vertices);
+}
+
+/**
+ * @brief Set the penalties, ring length and graph size the vertices data works
+ * with, and empty it. @p num_vertices is the domain of the vertex->index map.
+ */
+THESEUS_HD inline void vd_init(QueryState &qs, int gapo, int gape, int nscores,
+                    int num_vertices) {
+    const int n = vd_init_scalar(qs, gapo, gape, nscores, num_vertices);
     for (int i = 0; i < n; ++i) {
         qs.vd_vertex_to_idx[i] = -1;
     }
+}
+
+/** @brief The scalar half of vd_new_alignment. See vd_init_scalar. */
+THESEUS_HD inline int vd_new_alignment_scalar(QueryState &qs) {
+    qs.vd_num_active = 0;
+    return vd_map_fill_count(qs.vd_num_vertices);
 }
 
 /**
  * @brief Drop all active vertices and mark every graph vertex inactive.
  */
 THESEUS_HD inline void vd_new_alignment(QueryState &qs) {
-    qs.vd_num_active = 0;
-    int n = qs.vd_num_vertices;
-    if (n > kMaxVertices) {
-        n = kMaxVertices;
-    }
+    const int n = vd_new_alignment_scalar(qs);
     for (int i = 0; i < n; ++i) {
         qs.vd_vertex_to_idx[i] = -1;
     }

@@ -176,6 +176,52 @@ __device__ void merge_i_candidate(QueryState &qs,
 constexpr int32_t kMaxWarps = 8;  // 256 threads, the largest block allowed
 
 /**
+ * @brief Block-wide max, returned to every thread.
+ *
+ * max is associative and commutative and the values are exact int32, so the
+ * result does not depend on the reduction order: this is the same number the
+ * serial scan produced. Shaped like the prefix sum in densify (warp reduction,
+ * then a fold over the at most 8 warp results on thread 0) and it borrows the
+ * same @p shared_warp_base scratch, which nothing else is using at the point in
+ * align_one where this runs.
+ *
+ * Every thread of the block must call it: it contains barriers.
+ */
+__device__ int32_t block_reduce_max(int32_t value, int32_t *shared_warp_base) {
+    const int32_t lane = threadIdx.x & 31;
+    const int32_t warp = threadIdx.x >> 5;
+    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
+
+    // blockDim.x is 64, 128 or 256, so every warp is full and the whole mask is
+    // the right one.
+    for (int32_t delta = 16; delta > 0; delta >>= 1) {
+        const int32_t other = __shfl_down_sync(0xffffffffu, value, delta);
+        if (other > value) {
+            value = other;
+        }
+    }
+    if (lane == 0) {
+        shared_warp_base[warp] = value;
+    }
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        int32_t acc = shared_warp_base[0];
+        for (int32_t w = 1; w < nwarps; ++w) {
+            if (shared_warp_base[w] > acc) {
+                acc = shared_warp_base[w];
+            }
+        }
+        shared_warp_base[0] = acc;
+    }
+    __syncthreads();
+
+    const int32_t result = shared_warp_base[0];
+    __syncthreads();   // shared_warp_base is scratch again for the caller
+    return result;
+}
+
+/**
  * @brief Block-parallel replacement for the densify loops of I, D and M.
  *
  * The serial form walks the active diagonals, keeps those still valid for this
@@ -598,38 +644,52 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int32_t &shared_accum,
                           int32_t &shared_span,
                           Cell &block_end_cell) {
+    // The longest vertex of the graph, which sizes the ScratchPad window: a max
+    // over the whole graph, so the block reduces it instead of thread 0 scanning
+    // num_vertices on its own.
+    int32_t local_max_diag = 0;
+    for (int32_t v = static_cast<int32_t>(threadIdx.x); v < graph.num_vertices;
+         v += static_cast<int32_t>(blockDim.x)) {
+        const int32_t n = vertex_len(graph, v);
+        if (n > local_max_diag) {
+            local_max_diag = n;
+        }
+    }
+    const int32_t max_diag = block_reduce_max(local_max_diag, shared_warp_base);
+
     if (threadIdx.x == 0) {
         qs.capacity_exceeded = false;
-        int32_t max_diag = 0;
-        for (int32_t v = 0; v < graph.num_vertices; ++v) {
-            const int32_t n = vertex_len(graph, v);
-            if (n > max_diag) {
-                max_diag = n;
-            }
-        }
-        // Scalar half of sp_init; the block clears the window below.
+        // Scalar halves only; the block runs both clearing loops below.
         shared_span = sp_init_window(qs, -query_len, max_diag);
+        sc_init(qs, scoring.nscores);
+        vd_init_scalar(qs, scoring.gapo, scoring.gape, scoring.nscores,
+                       graph.num_vertices);
+        sc_new_alignment(qs);
+        bs_new_alignment(qs);
+        vd_new_alignment_scalar(qs);
     }
     __syncthreads();
 
-    // Uniform across the block (written before the barrier), so every thread
-    // runs the same number of iterations. The stores are independent and the
-    // written value is the same everywhere, so the result does not depend on
-    // which thread clears which cell.
-    for (int32_t i = threadIdx.x; i < shared_span;
+    // Both bounds are uniform (shared_span written before the barrier,
+    // graph.num_vertices a kernel argument), so every thread runs the same
+    // number of iterations. The stores are independent and all write the same
+    // value, so the result does not depend on which thread clears which entry.
+    //
+    // vd_init and vd_new_alignment clear the same prefix of vd_vertex_to_idx to
+    // the same -1, one right after the other, so the two loops collapse into
+    // this one pass with no change to the state either produced.
+    const int32_t vd_fill = vd_map_fill_count(graph.num_vertices);
+    for (int32_t i = static_cast<int32_t>(threadIdx.x); i < shared_span;
          i += static_cast<int32_t>(blockDim.x)) {
         qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
     }
+    for (int32_t i = static_cast<int32_t>(threadIdx.x); i < vd_fill;
+         i += static_cast<int32_t>(blockDim.x)) {
+        qs.vd_vertex_to_idx[i] = -1;
+    }
     __syncthreads();
 
     if (threadIdx.x == 0) {
-        sc_init(qs, scoring.nscores);
-        vd_init(qs, scoring.gapo, scoring.gape, scoring.nscores,
-                graph.num_vertices);
-        sc_new_alignment(qs);
-        bs_new_alignment(qs);
-        vd_new_alignment(qs);
-
         block_score = 0;
         block_end = 0;
         block_end_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
