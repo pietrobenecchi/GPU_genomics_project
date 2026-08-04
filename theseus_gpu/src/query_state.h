@@ -376,9 +376,13 @@ THESEUS_HD inline Cell &sp_access_alloc(QueryState &qs, int diag) {
  * @brief Reset the scratchpad: set every active diagonal back to inactive and
  * empty the active list. Only touched cells are cleared, matching the CPU code.
  */
+THESEUS_HD inline void sp_reset_one(QueryState &qs, int i) {
+    qs.sp_wf[qs.sp_diags[i] - qs.sp_min_diag].offset = -1;
+}
+
 THESEUS_HD inline void sp_reset(QueryState &qs) {
     for (int i = 0; i < qs.sp_ndiags; ++i) {
-        qs.sp_wf[qs.sp_diags[i] - qs.sp_min_diag].offset = -1;
+        sp_reset_one(qs, i);
     }
     qs.sp_ndiags = 0;
 }
@@ -603,11 +607,20 @@ THESEUS_HD inline void vd_activate_vertex(QueryState &qs, int vtx) {
 /**
  * @brief Clear the jump positions of every active vertex at @p score's ring slot.
  */
+THESEUS_HD inline int vd_new_score_slot(const QueryState &qs, int score) {
+    return score % qs.vd_nscores;
+}
+
+/** @brief Clear one active vertex's jump positions at ring slot @p pos. */
+THESEUS_HD inline void vd_new_score_one(QueryState &qs, int a, int pos) {
+    qs.vd_m_jumps_pos_size[a][pos] = 0;
+    qs.vd_i_jumps_pos_size[a][pos] = 0;
+}
+
 THESEUS_HD inline void vd_new_score(QueryState &qs, int score) {
-    const int pos = score % qs.vd_nscores;
+    const int pos = vd_new_score_slot(qs, score);
     for (int a = 0; a < qs.vd_num_active; ++a) {
-        qs.vd_m_jumps_pos_size[a][pos] = 0;
-        qs.vd_i_jumps_pos_size[a][pos] = 0;
+        vd_new_score_one(qs, a, pos);
     }
 }
 
