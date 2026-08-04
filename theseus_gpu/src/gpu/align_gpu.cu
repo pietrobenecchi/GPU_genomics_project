@@ -596,6 +596,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int &shared_i_count,
                           int32_t *shared_warp_base,
                           int32_t &shared_accum,
+                          int32_t &shared_span,
                           Cell &block_end_cell) {
     if (threadIdx.x == 0) {
         qs.capacity_exceeded = false;
@@ -606,7 +607,22 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                 max_diag = n;
             }
         }
-        sp_init(qs, -query_len, max_diag);
+        // Scalar half of sp_init; the block clears the window below.
+        shared_span = sp_init_window(qs, -query_len, max_diag);
+    }
+    __syncthreads();
+
+    // Uniform across the block (written before the barrier), so every thread
+    // runs the same number of iterations. The stores are independent and the
+    // written value is the same everywhere, so the result does not depend on
+    // which thread clears which cell.
+    for (int32_t i = threadIdx.x; i < shared_span;
+         i += static_cast<int32_t>(blockDim.x)) {
+        qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+    }
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
         sc_init(qs, scoring.nscores);
         vd_init(qs, scoring.gapo, scoring.gape, scoring.nscores,
                 graph.num_vertices);
@@ -713,6 +729,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
     __shared__ int shared_i_count;
     __shared__ int32_t shared_warp_base[kMaxWarps];
     __shared__ int32_t shared_accum;
+    __shared__ int32_t shared_span;
     __shared__ Cell block_end_cell;
 
     // One tile per staging buffer, sized at launch on blockDim.x. Cell first
@@ -746,7 +763,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
               shared_num_active, shared_vertex, shared_range_start,
               shared_range_end, shared_m_cells, shared_m_valid,
               shared_i_ranges, shared_i_candidates, shared_i_valid,
-              shared_i_count, shared_warp_base, shared_accum,
+              shared_i_count, shared_warp_base, shared_accum, shared_span,
               block_end_cell);
 }
 

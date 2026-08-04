@@ -303,7 +303,17 @@ inline const char *cap_buffer_name(int8_t reason) {
  * at construction and again only when the window has to grow, matching when the
  * CPU code reallocates.
  */
-THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
+/**
+ * @brief The scalar half of sp_init: set the window, empty the active list and
+ * check the span. Returns the number of cells the caller still has to clear, or
+ * 0 when the span does not fit (the cap failure is already recorded).
+ *
+ * Split out so the GPU can run the clearing loop across the block: the stores
+ * are independent, and 52 224 of them on one thread was the largest serial
+ * stretch in the kernel. sp_init below is this plus the serial loop, which is
+ * what the CPU flattening still calls.
+ */
+THESEUS_HD inline int sp_init_window(QueryState &qs, int min_diag, int max_diag) {
     qs.sp_min_diag = min_diag;
     qs.sp_max_diag = max_diag;
     qs.sp_ndiags = 0;
@@ -312,8 +322,13 @@ THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
     const int span = max_diag - min_diag + 1;
     if (span > kScratchpadSpan) {
         cap_fail(qs, kCapScratchpadSpan, span, kScratchpadSpan);
-        return;
+        return 0;
     }
+    return span;
+}
+
+THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
+    const int span = sp_init_window(qs, min_diag, max_diag);
     for (int i = 0; i < span; ++i) {
         qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
     }
