@@ -168,15 +168,168 @@ __device__ bool make_i_candidate(QueryState &qs,
     return candidate.offset <= query_len && new_col <= ranges.upper_bound;
 }
 
-__device__ void merge_i_candidate(QueryState &qs,
-                                  const Cell &candidate) {
-    Cell &cell = sp_access_alloc(qs, candidate.diag);
-    if (cell.offset < candidate.offset) {
-        cell = candidate;
+constexpr int32_t kMaxWarps = 8;  // 256 threads, the largest block allowed
+
+/**
+ * @brief Allocate one slot per thread whose @p flag is set, in thread order, and
+ * return this thread's slot.
+ *
+ * The aggregation densify has always used, lifted out so the merge phases can
+ * reuse it instead of introducing a second scheme: a warp ballot gives the
+ * within-warp prefix, then thread 0 folds the (at most 8) warp counts into
+ * exclusive bases. @p shared_running is read as the first free slot and left at
+ * the first free slot after this call, so consecutive tiles keep numbering
+ * where the previous one stopped. That is what makes the slots identical to the
+ * positions a serial append in the same order would have produced.
+ *
+ * Every thread of the block must call it: it contains barriers.
+ */
+__device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
+                                      int32_t &shared_running) {
+    const int32_t lane = threadIdx.x & 31;
+    const int32_t warp = threadIdx.x >> 5;
+    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
+
+    // Every thread reaches the ballot, including the ones with flag 0, so the
+    // warp stays converged.
+    const unsigned ballot = __ballot_sync(0xffffffffu, flag != 0);
+    const int32_t warp_prefix = __popc(ballot & ((1u << lane) - 1u));
+    if (lane == 0) {
+        shared_warp_base[warp] = __popc(ballot);
     }
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        int32_t acc = shared_running;
+        for (int32_t w = 0; w < nwarps; ++w) {
+            const int32_t count = shared_warp_base[w];
+            shared_warp_base[w] = acc;   // exclusive base for this warp
+            acc += count;
+        }
+        shared_running = acc;
+    }
+    __syncthreads();
+
+    const int32_t slot = shared_warp_base[warp] + warp_prefix;
+    __syncthreads();   // shared_warp_base is scratch again for the caller
+    return slot;
 }
 
-constexpr int32_t kMaxWarps = 8;  // 256 threads, the largest block allowed
+/**
+ * @brief Block-parallel replacement for the serial merge of one tile of staged
+ * candidates into the ScratchPad.
+ *
+ * The serial loop is
+ *
+ *     Cell &cell = sp_access_alloc(qs, c.diag);
+ *     if (cell.offset < c.offset) cell = c;
+ *
+ * over the tile in index order, and it has two observable effects, not one.
+ *
+ * **The winner.** The comparison is strict, so a later candidate with an equal
+ * offset never replaces an earlier one: the surviving cell is the candidate with
+ * the largest offset and, among equals, the smallest index. Folding the tile to
+ * that argmax and then comparing it once against the cell already there gives
+ * the same result, because everything already in the cell came from a smaller
+ * index and so wins its own ties.
+ *
+ * **The order of sp_diags.** access_alloc appends the diagonal on first touch,
+ * and densify walks sp_diags in that order, so the append order decides the
+ * order of the dense wavefront, hence the Ranges, hence the prev_pos of later
+ * waves. That is the part a plain "max over offset" would silently get wrong.
+ * Here the first toucher is the smallest index among the tile's valid
+ * candidates on that diagonal, and the appends are numbered with the same
+ * prefix-sum allocator densify uses, so they land exactly where the serial
+ * appends would have.
+ *
+ * The two reductions are done with an O(tile) scan per thread over the staged
+ * tile rather than with atomics on an array indexed by diagonal: such an array
+ * would need one entry per diagonal over kScratchpadSpan (52 224), which does
+ * not fit in shared memory and would cost more to clear than the merge costs to
+ * run.
+ *
+ * The one thing this cannot reproduce is a candidate whose offset is negative.
+ * Serially such a candidate leaves the cell at -1, so the *next* candidate on
+ * that diagonal appends it a second time; here it would be appended once. Cell
+ * offsets are query positions and are never negative, so the case is
+ * unreachable — and it is checked rather than assumed: cap_fail fires if it
+ * ever happens, instead of the output quietly diverging.
+ *
+ * Every thread of the block must call it: it contains barriers.
+ */
+__device__ void merge_candidate_tile(QueryState &qs,
+                                     const Cell *shared_cells,
+                                     const int *shared_valid,
+                                     int32_t tile_len,
+                                     int32_t *shared_warp_base,
+                                     int32_t &shared_accum) {
+    const int32_t me = static_cast<int32_t>(threadIdx.x);
+    const bool mine = me < tile_len && shared_valid[me] != 0;
+    const int32_t my_diag = mine ? shared_cells[me].diag : 0;
+    const int32_t my_off = mine ? shared_cells[me].offset : 0;
+
+    // Same guard as sp_access_alloc: out of window is a capacity failure, and
+    // the candidate neither appends nor writes.
+    const int32_t idx = my_diag - qs.sp_min_diag;
+    const bool in_range = mine && idx >= 0 && idx < kScratchpadSpan;
+    if (mine && !in_range) {
+        cap_fail(qs, kCapScratchpadSpan, idx < 0 ? -idx : idx + 1,
+                 kScratchpadSpan);
+    }
+    if (mine && my_off < 0) {
+        // Unreachable (see above); never silent if it ever becomes reachable.
+        cap_fail(qs, kCapScratchpadSpan, -1, kScratchpadSpan);
+    }
+
+    bool is_winner = in_range;
+    bool is_first = in_range;
+    if (in_range) {
+        for (int32_t j = 0; j < tile_len; ++j) {
+            if (j == me || shared_valid[j] == 0 ||
+                shared_cells[j].diag != my_diag) {
+                continue;
+            }
+            const int32_t oj = shared_cells[j].offset;
+            if (oj > my_off || (oj == my_off && j < me)) {
+                is_winner = false;
+            }
+            if (j < me) {
+                is_first = false;
+            }
+        }
+    }
+
+    // Read the resting state before any of this tile's writes: a diagonal is
+    // appended only if the cell was still inactive, exactly as access_alloc
+    // decides it.
+    const bool needs_append = is_first && qs.sp_wf[idx].offset == -1;
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        shared_accum = qs.sp_ndiags;
+    }
+    __syncthreads();
+    const int32_t slot =
+        block_prefix_alloc(needs_append ? 1 : 0, shared_warp_base, shared_accum);
+    if (needs_append) {
+        if (slot < kScratchpadSpan) {
+            qs.sp_diags[slot] = my_diag;
+        } else {
+            cap_fail(qs, kCapScratchpadDiags, slot + 1, kScratchpadSpan);
+        }
+    }
+    if (threadIdx.x == 0) {
+        qs.sp_ndiags =
+            shared_accum < kScratchpadSpan ? shared_accum : kScratchpadSpan;
+    }
+    __syncthreads();
+
+    // One winner per diagonal, so no two threads write the same cell.
+    if (is_winner && qs.sp_wf[idx].offset < my_off) {
+        qs.sp_wf[idx] = shared_cells[me];
+    }
+    __syncthreads();
+}
 
 /**
  * @brief Block-wide max, returned to every thread.
@@ -248,9 +401,6 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
                          int32_t *shared_warp_base, int32_t &shared_accum) {
     const int32_t ndiags = qs.sp_ndiags;   // uniform: densify never touches it
     const int32_t range_start = wf_size;   // read before thread 0 updates it
-    const int32_t lane = threadIdx.x & 31;
-    const int32_t warp = threadIdx.x >> 5;
-    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
 
     if (threadIdx.x == 0) {
         shared_accum = 0;
@@ -269,29 +419,10 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
             }
         }
 
-        // Every thread reaches the ballot, including the out-of-range ones with
-        // flag 0, so the warp stays converged.
-        const unsigned ballot = __ballot_sync(0xffffffffu, flag != 0);
-        const int32_t warp_prefix =
-            __popc(ballot & ((1u << lane) - 1u));
-        if (lane == 0) {
-            shared_warp_base[warp] = __popc(ballot);
-        }
-        __syncthreads();
-
-        if (threadIdx.x == 0) {
-            int32_t acc = shared_accum;
-            for (int32_t w = 0; w < nwarps; ++w) {
-                const int32_t count = shared_warp_base[w];
-                shared_warp_base[w] = acc;   // exclusive base for this warp
-                acc += count;
-            }
-            shared_accum = acc;
-        }
-        __syncthreads();
-
+        const int32_t slot =
+            block_prefix_alloc(flag, shared_warp_base, shared_accum);
         if (flag != 0) {
-            const int32_t pos = range_start + shared_warp_base[warp] + warp_prefix;
+            const int32_t pos = range_start + slot;
             if (pos < capacity) {
                 wf[pos] = value;
             }
@@ -368,9 +499,11 @@ __device__ Range finish_i_wavefront(QueryState &qs, int32_t score,
  * capacity ceiling that used to abort the alignment when a vertex produced more
  * than kScopeWavefrontCapacity candidates.
  *
- * The merge stays on thread 0: candidates can collide on a diagonal and the
- * winner is the largest offset, so merging in candidate order is what keeps the
- * result identical to the CPU. Tiling preserves that order exactly.
+ * Candidates can collide on a diagonal, so the merge is not a plain scatter:
+ * merge_candidate_tile reproduces both effects the serial order had, the winner
+ * and the append order of sp_diags. Tiling preserves the index order exactly,
+ * and the merge is done per tile because the ScratchPad state carries over from
+ * one tile to the next.
  */
 __device__ void generate_and_merge_i_candidates(
                                                 QueryState &qs, const AlignScoring &scoring, const char *query,
@@ -405,17 +538,10 @@ __device__ void generate_and_merge_i_candidates(
         }
         __syncthreads();
 
-        if (threadIdx.x == 0) {
-            const int32_t remaining = count - tile_start;
-            const int32_t lanes = remaining < tile ? remaining : tile;
-            for (int32_t lane = 0; lane < lanes; ++lane) {
-                if (shared_i_valid[lane] == 0) {
-                    continue;
-                }
-                merge_i_candidate(qs, shared_i_candidates[lane]);
-            }
-        }
-        __syncthreads();
+        const int32_t remaining = count - tile_start;
+        const int32_t lanes = remaining < tile ? remaining : tile;
+        merge_candidate_tile(qs, shared_i_candidates, shared_i_valid, lanes,
+                             shared_warp_base, shared_accum);
     }
 
     const Range new_range = finish_i_wavefront(qs, score, v,
