@@ -857,9 +857,8 @@ __device__ void process_vertex(QueryState &qs,
                                     shared_accum, block_end,
                                     block_end_cell);
 
-    // Sparsify stays on thread 0 (it merges into the shared scratchpad, where
-    // candidates collide by diagonal); the reset before it and the densify
-    // after it are both block-wide.
+    // Reset, sparsify and densify are all block-wide now. Only the plan itself
+    // is built on thread 0, and it is a handful of scalar reads.
     sp_reset_block(qs);
     if (threadIdx.x == 0) {
         shared_sparsify_plan =
@@ -882,9 +881,12 @@ __device__ void process_vertex(QueryState &qs,
 
     sp_reset_block(qs);
     if (threadIdx.x == 0) {
-        core_next_m_sparsify(qs, scoring, query_len, graph, score, v);
+        shared_sparsify_plan =
+            prepare_m_sparsify_plan(qs, scoring, query_len, graph, score, v);
     }
     __syncthreads();
+    run_sparsify_plan(qs, shared_sparsify_plan, shared_i_candidates,
+                      shared_i_valid, shared_warp_base, shared_accum);
     {
         const Range m_range =
             densify(qs, Cell::Matrix::M, v, qs.bs_m_wf, qs.bs_m_wf_size,
