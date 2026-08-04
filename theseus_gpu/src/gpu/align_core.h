@@ -220,7 +220,7 @@ THESEUS_HD inline void core_check_and_store_jumps(QueryState &qs, const char *qu
 THESEUS_HD inline void core_next_i(QueryState &qs, const AlignScoring &scoring,
                                    const char *query, int32_t query_len,
                                    const GraphCsrView &graph, int32_t score,
-                                   int32_t v) {
+                                   int32_t v, bool &end, Cell &end_cell) {
     const int32_t upper_bound = vertex_len(graph, v);
     const int32_t pos_prev_m = score - (scoring.gapo + scoring.gape);
     const int32_t pos_prev_i = score - scoring.gape;
@@ -257,6 +257,14 @@ THESEUS_HD inline void core_next_i(QueryState &qs, const AlignScoring &scoring,
     }
     new_range.end = sc_i_wf_size(qs, score);
     sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
+
+    // Mirrors the tail of the CPU's next_I: every I cell that has just reached
+    // the last column of this vertex opens M and I jumps into the neighbours.
+    // Without it those jump candidates never enter the later wavefronts.
+    if (edge_begin(graph, v) < edge_end(graph, v)) {
+        core_check_and_store_jumps(qs, query, query_len, graph, score, v,
+                                   sc_i_wf(qs, score), new_range, end, end_cell);
+    }
 }
 
 THESEUS_HD inline void core_next_d(QueryState &qs, const AlignScoring &scoring,
@@ -354,7 +362,7 @@ THESEUS_HD inline void core_process_vertex(QueryState &qs, const AlignScoring &s
                                            const char *query, int32_t query_len,
                                            const GraphCsrView &graph, int32_t score,
                                            int32_t v, bool &end, Cell &end_cell) {
-    core_next_i(qs, scoring, query, query_len, graph, score, v);
+    core_next_i(qs, scoring, query, query_len, graph, score, v, end, end_cell);
     sp_reset(qs);
     core_next_d(qs, scoring, query_len, graph, score, v);
     sp_reset(qs);

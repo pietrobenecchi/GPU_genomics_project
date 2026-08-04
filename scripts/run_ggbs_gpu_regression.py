@@ -24,31 +24,31 @@ CONFIGS = [(0, None), (1, 64), (1, 128), (1, 256)]
 DATASETS = {
     "ebola_exact_smoke": {
         "tier": "simple",
-        "graph": "theseus_proxy/data/validation/ggbs/graphs/ebola.gfa",
-        "queries": "theseus_proxy/data/validation/ggbs/queries/ebola_exact_smoke.queries",
-        "metadata": "theseus_proxy/data/validation/ggbs/truth/ebola_exact_smoke.metadata.json",
-        "golden": "theseus_proxy/data/validation/ggbs/golden/ebola_exact_smoke.cpu.gaf",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_exact_smoke.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_exact_smoke.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/ebola_exact_smoke.cpu.gaf",
     },
     "c4_exact": {
         "tier": "simple",
-        "graph": "theseus_proxy/data/validation/ggbs/graphs/c4.gfa",
-        "queries": "theseus_proxy/data/validation/ggbs/queries/c4_exact.queries",
-        "metadata": "theseus_proxy/data/validation/ggbs/truth/c4_exact.metadata.json",
-        "golden": "theseus_proxy/data/validation/ggbs/golden/c4_exact.cpu.gaf",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_exact.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_exact.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_exact.cpu.gaf",
     },
     "ebola_error_smoke": {
         "tier": "complex",
-        "graph": "theseus_proxy/data/validation/ggbs/graphs/ebola.gfa",
-        "queries": "theseus_proxy/data/validation/ggbs/queries/ebola_error_smoke.queries",
-        "metadata": "theseus_proxy/data/validation/ggbs/truth/ebola_error_smoke.metadata.json",
-        "golden": "theseus_proxy/data/validation/ggbs/golden/ebola_error_smoke.cpu.gaf",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_error_smoke.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_error_smoke.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/ebola_error_smoke.cpu.gaf",
     },
     "c4_err": {
         "tier": "complex",
-        "graph": "theseus_proxy/data/validation/ggbs/graphs/c4.gfa",
-        "queries": "theseus_proxy/data/validation/ggbs/queries/c4_err.queries",
-        "metadata": "theseus_proxy/data/validation/ggbs/truth/c4_err.metadata.json",
-        "golden": "theseus_proxy/data/validation/ggbs/golden/c4_err.cpu.gaf",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_err.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_err.cpu.gaf",
     },
 }
 
@@ -287,7 +287,7 @@ def run_dataset(
                 f"{label}: TIMEOUT after {timeout:g}s.\n"
                 "The GPU path also runs the CPU aligner to verify the kernel, and on reads "
                 "needing a non-zero score that call does not return. See "
-                "theseus_proxy/data/validation/repro/README.md."
+                "theseus_gpu/data/validation/repro/README.md."
             )
             continue
         if completed.returncode != 0:
@@ -380,7 +380,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--golden", type=Path)
     parser.add_argument("--build-dir", type=Path, default=Path("build-gpu"))
-    parser.add_argument("--output-dir", type=Path, default=Path("theseus_proxy/data/validation/ggbs/gpu_results"))
+    parser.add_argument("--output-dir", type=Path, default=Path("theseus_gpu/data/validation/ggbs/gpu_results"))
     parser.add_argument("--require-device", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args(argv)
     if args.suite and args.dataset:

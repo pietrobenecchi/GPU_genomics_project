@@ -1,19 +1,22 @@
-# theseus_proxy
+# theseus_gpu
 
-Minimal proxy project focused only on sequence-to-graph alignment.
+The working aligner: sequence-to-graph alignment, host code and CUDA kernel.
+The frozen pre-flattening CPU aligner that produces the goldens lives in
+`cpu_oracle/` at the repository root.
 
 This folder intentionally excludes:
 - MSA / POA graph-construction features
 - MSA tools/tests
 
 ## What is included
-- Core seq-to-graph aligner library (`theseus_proxy`)
+- Core seq-to-graph aligner library (CMake target name: `theseus_proxy`)
+- GPU backend under `src/gpu/` (CUDA kernel plus its CPU stub)
 - Small proxy CLI app: `seq2graph_proxy`
 - Tiny sample dataset for quick runs
 
 ## Build
 ```bash
-cd theseus_proxy
+cd theseus_gpu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```

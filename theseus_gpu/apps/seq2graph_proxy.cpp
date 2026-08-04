@@ -226,6 +226,14 @@ bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
 
   std::cerr << "GPU backend: " << report.message << "\n";
 
+  // Printed on its own line so a before/after comparison needs nothing beyond
+  // the run the regression already performs.
+  if (report.device_used) {
+    std::cerr << "GPU timing: h2d " << report.h2d_ms << " ms; kernel "
+              << report.kernel_ms << " ms; d2h " << report.d2h_ms
+              << " ms; total " << report.end_to_end_ms << " ms\n";
+  }
+
   // The output above is correct either way, because the backend falls back to
   // the CPU when the kernel result is unusable. That makes a byte comparison
   // against a CPU golden pass without the kernel having contributed anything,

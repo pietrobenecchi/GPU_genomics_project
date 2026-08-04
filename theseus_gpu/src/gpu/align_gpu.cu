@@ -22,7 +22,18 @@ namespace {
 
 char g_last_error[256] = {0};
 TimingReport g_last_timing;
-constexpr int32_t kConfig1ICandidateCapacity = kScopeWavefrontCapacity;
+
+/**
+ * @brief Bytes of dynamic shared memory one config1 block needs.
+ *
+ * Both staging buffers hold exactly one tile, so the requirement scales with the
+ * block size instead of with kScopeWavefrontCapacity. The layout here must match
+ * the partitioning at the top of theseus_align_batch_config1_kernel.
+ */
+size_t config1_shared_bytes(int32_t threads_per_block) {
+    return static_cast<size_t>(threads_per_block) *
+           (2 * sizeof(Cell) + 2 * sizeof(int));
+}
 
 struct Config1ICandidateRanges {
     Range i_dense;
@@ -175,8 +186,8 @@ __device__ void config1_merge_i_candidate(QueryState &qs,
     }
 }
 
-__device__ void config1_finish_i_wavefront(QueryState &qs, int32_t score,
-                                           int32_t v) {
+__device__ Range config1_finish_i_wavefront(QueryState &qs, int32_t score,
+                                            int32_t v) {
     Range new_range;
     new_range.start = sc_i_wf_size(qs, score);
     for (int32_t di = 0; di < qs.sp_ndiags; ++di) {
@@ -188,44 +199,82 @@ __device__ void config1_finish_i_wavefront(QueryState &qs, int32_t score,
     }
     new_range.end = sc_i_wf_size(qs, score);
     sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
+    return new_range;
 }
 
+/**
+ * @brief Build the I candidates for one vertex and merge them into the scratchpad.
+ *
+ * The candidate space is consumed one tile of blockDim.x elements at a time, the
+ * same way config1_extend_and_consume_m_cells consumes the M range. Staging a
+ * tile rather than the whole candidate space is what lets the shared buffers be
+ * sized on the block instead of on kScopeWavefrontCapacity, and it removes the
+ * capacity ceiling that used to abort the alignment when a vertex produced more
+ * than kScopeWavefrontCapacity candidates.
+ *
+ * The merge stays on thread 0: candidates can collide on a diagonal and the
+ * winner is the largest offset, so merging in candidate order is what keeps the
+ * result identical to the CPU. Tiling preserves that order exactly.
+ */
 __device__ void config1_generate_and_merge_i_candidates(
-        QueryState &qs, const AlignScoring &scoring, int32_t query_len,
+        QueryState &qs, const AlignScoring &scoring, const char *query,
+        int32_t query_len,
         const GraphCsrView &graph, int32_t score, int32_t v,
         Config1ICandidateRanges &shared_i_ranges,
         Cell *shared_i_candidates, int *shared_i_valid,
-        int &shared_i_count, int &shared_i_failed) {
+        int &shared_i_count, int &block_end, Cell &block_end_cell) {
     if (threadIdx.x == 0) {
         shared_i_ranges = config1_prepare_i_candidate_ranges(qs, scoring, graph,
                                                              score, v);
         shared_i_count = shared_i_ranges.total;
-        shared_i_failed = shared_i_count > kConfig1ICandidateCapacity ? 1 : 0;
     }
     __syncthreads();
 
-    if (shared_i_failed == 0) {
-        for (int32_t idx = threadIdx.x; idx < shared_i_count; idx += blockDim.x) {
+    // Uniform across the block: written by thread 0 before the barrier above, so
+    // every thread runs the same number of tiles and reaches the same barriers.
+    const int32_t count = shared_i_count;
+    const int32_t tile = static_cast<int32_t>(blockDim.x);
+
+    for (int32_t tile_start = 0; tile_start < count; tile_start += tile) {
+        const int32_t idx = tile_start + static_cast<int32_t>(threadIdx.x);
+        if (idx < count) {
             Cell candidate{-1, -1, -1, -1, Cell::Matrix::None};
             const bool valid = config1_make_i_candidate(qs, shared_i_ranges, idx,
                                                         query_len, candidate);
-            shared_i_candidates[idx] = candidate;
-            shared_i_valid[idx] = valid ? 1 : 0;
-        }
-    }
-    __syncthreads();
-
-    if (threadIdx.x == 0) {
-        if (shared_i_failed != 0) {
-            cap_fail(qs, kCapIJumpStack, kMaxIJumpStack + 1, kMaxIJumpStack);
+            shared_i_candidates[threadIdx.x] = candidate;
+            shared_i_valid[threadIdx.x] = valid ? 1 : 0;
         } else {
-            for (int32_t idx = 0; idx < shared_i_count; ++idx) {
-                if (shared_i_valid[idx] == 0) {
+            shared_i_valid[threadIdx.x] = 0;
+        }
+        __syncthreads();
+
+        if (threadIdx.x == 0) {
+            const int32_t remaining = count - tile_start;
+            const int32_t lanes = remaining < tile ? remaining : tile;
+            for (int32_t lane = 0; lane < lanes; ++lane) {
+                if (shared_i_valid[lane] == 0) {
                     continue;
                 }
-                config1_merge_i_candidate(qs, shared_i_candidates[idx]);
+                config1_merge_i_candidate(qs, shared_i_candidates[lane]);
             }
-            config1_finish_i_wavefront(qs, score, v);
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        const Range new_range = config1_finish_i_wavefront(qs, score, v);
+        // Same tail as the CPU's next_I and as core_next_i: the I cells that
+        // just reached the last column of this vertex open jumps into its
+        // neighbours. core_store_m_jump can hit the end condition, so the
+        // block's end state has to travel through here too.
+        if (edge_begin(graph, v) < edge_end(graph, v)) {
+            bool end = block_end != 0;
+            Cell end_cell = block_end_cell;
+            core_check_and_store_jumps(qs, query, query_len, graph, score, v,
+                                       sc_i_wf(qs, score), new_range, end,
+                                       end_cell);
+            block_end = end ? 1 : 0;
+            block_end_cell = end_cell;
         }
     }
     __syncthreads();
@@ -297,7 +346,6 @@ __device__ void config1_process_vertex(QueryState &qs,
                                        Cell *shared_i_candidates,
                                        int *shared_i_valid,
                                        int &shared_i_count,
-                                       int &shared_i_failed,
                                        int &block_end,
                                        Cell &block_end_cell) {
     if (threadIdx.x == 0) {
@@ -307,10 +355,11 @@ __device__ void config1_process_vertex(QueryState &qs,
     }
     __syncthreads();
 
-    config1_generate_and_merge_i_candidates(qs, scoring, query_len, graph,
+    config1_generate_and_merge_i_candidates(qs, scoring, query, query_len, graph,
                                             score, v, shared_i_ranges,
                                             shared_i_candidates, shared_i_valid,
-                                            shared_i_count, shared_i_failed);
+                                            shared_i_count, block_end,
+                                            block_end_cell);
 
     if (threadIdx.x == 0) {
         sp_reset(qs);
@@ -352,7 +401,6 @@ __device__ void config1_compute_new_wave(QueryState &qs,
                                          Cell *shared_i_candidates,
                                          int *shared_i_valid,
                                          int &shared_i_count,
-                                         int &shared_i_failed,
                                          int &block_end,
                                          Cell &block_end_cell) {
     if (threadIdx.x == 0) {
@@ -372,7 +420,7 @@ __device__ void config1_compute_new_wave(QueryState &qs,
                                shared_range_end, shared_m_cells,
                                shared_m_valid, shared_i_ranges,
                                shared_i_candidates, shared_i_valid,
-                               shared_i_count, shared_i_failed, block_end,
+                               shared_i_count, block_end,
                                block_end_cell);
     }
 }
@@ -396,7 +444,6 @@ __device__ void align_one_config1(QueryState &qs, const AlignScoring &scoring,
                                   Cell *shared_i_candidates,
                                   int *shared_i_valid,
                                   int &shared_i_count,
-                                  int &shared_i_failed,
                                   Cell &block_end_cell) {
     if (threadIdx.x == 0) {
         qs.capacity_exceeded = false;
@@ -463,7 +510,7 @@ __device__ void align_one_config1(QueryState &qs, const AlignScoring &scoring,
                                  shared_m_cells, shared_m_valid,
                                  shared_i_ranges, shared_i_candidates,
                                  shared_i_valid, shared_i_count,
-                                 shared_i_failed, block_end, block_end_cell);
+                                 block_end, block_end_cell);
 
         if (threadIdx.x == 0) {
             ++block_score;
@@ -509,14 +556,18 @@ __global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView
     __shared__ int shared_vertex;
     __shared__ int64_t shared_range_start;
     __shared__ int64_t shared_range_end;
-    __shared__ Cell shared_m_cells[256];
-    __shared__ int shared_m_valid[256];
     __shared__ Config1ICandidateRanges shared_i_ranges;
-    __shared__ Cell shared_i_candidates[kConfig1ICandidateCapacity];
-    __shared__ int shared_i_valid[kConfig1ICandidateCapacity];
     __shared__ int shared_i_count;
-    __shared__ int shared_i_failed;
     __shared__ Cell block_end_cell;
+
+    // One tile per staging buffer, sized at launch on blockDim.x. Cell first
+    // because it is the most strictly aligned member; the layout must match
+    // config1_shared_bytes().
+    extern __shared__ unsigned char config1_smem[];
+    Cell *shared_i_candidates = reinterpret_cast<Cell *>(config1_smem);
+    Cell *shared_m_cells = shared_i_candidates + blockDim.x;
+    int *shared_i_valid = reinterpret_cast<int *>(shared_m_cells + blockDim.x);
+    int *shared_m_valid = shared_i_valid + blockDim.x;
 
     if (tid == 0) {
         block_continue = 0;
@@ -527,7 +578,6 @@ __global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView
         shared_range_start = 0;
         shared_range_end = 0;
         shared_i_count = 0;
-        shared_i_failed = 0;
         block_end_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
     }
 
@@ -541,7 +591,7 @@ __global__ void theseus_align_batch_config1_kernel(BatchView batch, GraphCsrView
                       shared_num_active, shared_vertex, shared_range_start,
                       shared_range_end, shared_m_cells, shared_m_valid,
                       shared_i_ranges, shared_i_candidates, shared_i_valid,
-                      shared_i_count, shared_i_failed, block_end_cell);
+                      shared_i_count, block_end_cell);
 }
 
 /**
@@ -734,6 +784,9 @@ Status align_batch(const BatchView &batch,
          options.threads_per_block == 256)
             ? options.threads_per_block
             : 128;
+    // Declared with the rest before the first `goto cleanup`: jumping over an
+    // initialisation is ill-formed.
+    const size_t config1_smem_bytes = config1_shared_bytes(threads_per_block);
 
     // Single exit path: every allocation below is released at `cleanup`.
     err = cudaMalloc(&d_chars, chars_bytes);
@@ -840,7 +893,8 @@ Status align_batch(const BatchView &batch,
 
     device_batch = BatchView{d_chars, d_offsets, batch.num_seqs};
     if (options.config == GpuConfig::Config1) {
-        theseus_align_batch_config1_kernel<<<batch.num_seqs, threads_per_block>>>(
+        theseus_align_batch_config1_kernel<<<batch.num_seqs, threads_per_block,
+                                             config1_smem_bytes>>>(
             device_batch, graph->view, d_start_node_ids, d_start_offsets, scoring,
             d_states, d_results);
     } else {

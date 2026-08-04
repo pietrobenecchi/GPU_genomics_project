@@ -7,15 +7,15 @@ build-gpu/
 
 # Vendored third-party benchmark suite (~2.7 GB): the GGBS checkout and the
 # Zenodo archives. Not our code and too large to track. Fetch with:
-#   git clone https://github.com/Mirkocoggi/GGBS theseus_proxy/external_datasets/GGBS
+#   git clone https://github.com/Mirkocoggi/GGBS external_datasets/GGBS
 #   zenodo archives: https://zenodo.org/records/12207360
 # The derived validation inputs we actually depend on live in
-# theseus_proxy/data/validation/ggbs and are tracked.
-theseus_proxy/external_datasets/
+# theseus_gpu/data/validation/ggbs and are tracked.
+external_datasets/
 
 # Per-run GPU output from run_ggbs_gpu_regression.py. The frozen CPU references
 # under golden/ are tracked; these are just the outputs being compared to them.
-theseus_proxy/data/validation/ggbs/gpu_results/
+theseus_gpu/data/validation/ggbs/gpu_results/
 
 # Agent instruction and handoff documents. Kept out of the repository on
 # purpose: they are working notes addressed to a tool, not project source.
@@ -23,7 +23,7 @@ CLAUDE.md
 HANDOFF.md
 GPU_PORT_PROMPT.md
 **/GPU_PORT_PROMPT.md
-theseus_proxy/docs/gpu_agent_handoff.md
+theseus_gpu/docs/gpu_agent_handoff.md
 .claude/
 
 __pycache__/

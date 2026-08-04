@@ -49,7 +49,7 @@ fixed-capacity guard drops data silently and the termination condition cannot
 survive that loss.
 
 All four queries below start at the same seed, `>2 4096 +`, and are 100 bp taken
-from node `2` of `theseus_proxy/data/validation/ggbs/graphs/c4.gfa`:
+from node `2` of `theseus_gpu/data/validation/ggbs/graphs/c4.gfa`:
 
 | File | Edit vs graph | Result |
 |---|---|---|
@@ -61,7 +61,7 @@ from node `2` of `theseus_proxy/data/validation/ggbs/graphs/c4.gfa`:
 ## Reproduce
 
 ```bash
-cd theseus_proxy
+cd theseus_gpu
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
 time ./build/apps/seq2graph_proxy --backend cpu \
     -g data/validation/ggbs/graphs/c4.gfa \
@@ -83,8 +83,8 @@ git archive 56663af theseus-proxy/theseus-proxy | tar -x -C /tmp/fullcpu --strip
 cmake -S /tmp/fullcpu -B /tmp/fullcpu/build -DCMAKE_BUILD_TYPE=Release
 cmake --build /tmp/fullcpu/build -j
 /tmp/fullcpu/build/apps/seq2graph_proxy \
-    -g theseus_proxy/data/validation/ggbs/graphs/c4.gfa \
-    -s theseus_proxy/data/validation/repro/c4_sub1.queries -f /tmp/sub1.gaf
+    -g theseus_gpu/data/validation/ggbs/graphs/c4.gfa \
+    -s theseus_gpu/data/validation/repro/c4_sub1.queries -f /tmp/sub1.gaf
 ```
 
 | Case | Current (flattened) | Commit `56663af` |

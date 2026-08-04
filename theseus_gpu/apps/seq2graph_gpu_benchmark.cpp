@@ -72,7 +72,7 @@ double run_cpu(theseus::TheseusAligner &aligner,
 }  // namespace
 
 int main(int argc, char **argv) {
-  const std::string graph_path = argc > 1 ? argv[1] : "theseus_proxy/data/sample_graph.gfa";
+  const std::string graph_path = argc > 1 ? argv[1] : "theseus_gpu/data/sample_graph.gfa";
   std::ifstream graph_file(graph_path);
   if (!graph_file.is_open()) {
     std::cerr << "could not open graph: " << graph_path << "\n";

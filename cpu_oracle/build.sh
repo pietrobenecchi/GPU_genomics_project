@@ -21,11 +21,11 @@ echo "sha256:        $(sha256sum "$here/bin/seq2graph_proxy_oracle" | cut -d' ' 
 echo
 echo "Sanity check against the committed toy baseline:"
 "$here/bin/seq2graph_proxy_oracle" \
-    -g "$here/../theseus_proxy/data/sample_graph.gfa" \
-    -s "$here/../theseus_proxy/data/sample_queries.fasta" \
+    -g "$here/../theseus_gpu/data/sample_graph.gfa" \
+    -s "$here/../theseus_gpu/data/sample_queries.fasta" \
     -f "$build/sample_output.gaf"
-if diff -q "$here/../theseus_proxy/baseline/sample_output.gaf" "$build/sample_output.gaf"; then
-    echo "OK: byte-identical to theseus_proxy/baseline/sample_output.gaf"
+if diff -q "$here/../theseus_gpu/baseline/sample_output.gaf" "$build/sample_output.gaf"; then
+    echo "OK: byte-identical to theseus_gpu/baseline/sample_output.gaf"
 else
     echo "FAIL: oracle output diverged from the committed baseline" >&2
     exit 1

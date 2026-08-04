@@ -39,7 +39,7 @@ def git_commit() -> str | None:
 
 
 def build_command(args: argparse.Namespace) -> list[str]:
-    """The oracle under oracle/ predates --backend and rejects unknown options,
+    """The oracle under cpu_oracle/ predates --backend and rejects unknown options,
     so driving it means leaving the flag off."""
     command = [str(args.binary)]
     if args.backend_flag:

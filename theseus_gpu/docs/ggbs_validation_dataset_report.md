@@ -15,8 +15,8 @@ Sources:
 - Associated repository: https://github.com/Mirkocoggi/GGBS
 
 Local copies:
-- GitHub checkout: `theseus_proxy/external_datasets/GGBS`
-- Zenodo archives: `theseus_proxy/external_datasets/GGBS_zenodo`
+- GitHub checkout: `external_datasets/GGBS`
+- Zenodo archives: `external_datasets/GGBS_zenodo`
 
 The Zenodo record exposes five archives: `Graphs.zip`, `short_match.zip`, `short_err.zip`, `long_match.zip`, `long_err.zip`. All were downloaded and their MD5 checksums match the Zenodo manifest:
 
