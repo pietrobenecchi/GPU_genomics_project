@@ -455,3 +455,191 @@ con `core_extend_diagonal` che può ricorrere.
 4. **Loop sui vertici attivi** — il più grosso, ma `sc_wf_push` fa append
    nell'ordine dei vertici: servirebbero offset pre-calcolati per restare
    byte-identical. Ultimo.
+
+---
+
+## Opt #4 — Distribuzione della classe A: i blocchi seriali senza vincoli d'ordine
+
+**Categoria**: distribuzione sui thread del blocco di lavoro che stava su thread 0.
+
+**Stato di partenza**: `835d0be`. **Commit**: `8ff0e4f`, `9b61b98`, `8e3be75`
+(branch `parallelizza/classe-a`).
+
+**Problema.** Un audit statico del kernel contava **22 blocchi
+`if (threadIdx.x == 0)`**: fuori dalle quattro fasi già parallele, il kernel
+girava su un thread solo mentre gli altri aspettavano alla barriera. È la stessa
+cosa che il profiling Nsight sopra aveva già quantificato dall'altra parte —
+1.03–1.56 thread attivi su 32, stall di barriera 30+ a 256 thread.
+
+**Metodo.** Prima un inventario dei 22 blocchi, classificati per *cosa impedisce*
+di distribuirli, non per quanto costano:
+
+- **A** — distribuibile senza problemi d'ordine: il risultato non dipende da
+  quale thread fa cosa.
+- **B** — richiede atomici e un tie-break deterministico, perché contiene una
+  risoluzione di collisioni.
+- **C** — lavoro O(1) o una tantum, non vale la pena.
+- **D** — ricorsione o dipendenza sequenziale, richiede ristrutturazione.
+
+Questa voce copre **solo la classe A**, cioè i casi in cui la parallelizzazione
+è per costruzione byte-identical: ogni thread scrive celle distinte, oppure
+scrive lo stesso valore, oppure partecipa a una riduzione associativa. Nessuna
+scelta fra parallelismo e identità bit-a-bit è stata necessaria qui — la classe
+A è esattamente l'insieme in cui quella scelta non si pone.
+
+**Cosa è stato distribuito.**
+
+| blocco | prima | ora |
+|---|---|---|
+| `sp_init` | 52 224 store di `Cell` su thread 0, una volta per query | loop block-stride |
+| `max_diag` | scansione di `graph.num_vertices` su thread 0 | `block_reduce_max` (riduzione warp + fold su ≤8 warp) |
+| `vd_init` + `vd_new_alignment` | due scansioni di `num_vertices` su thread 0 | un solo loop block-stride |
+| write-back celle M | thread 0 ricopiava l'intera tile da shared | il thread che fa l'LCP scrive direttamente in `bs_m_wf` |
+| `sp_reset` ×3 per vertice per score | `sp_ndiags` store su thread 0 | loop block-stride |
+| `vd_new_score` | `2 × vd_num_active` store su thread 0 | un vertice attivo per thread |
+
+`sp_init` era di gran lunga il più pesante: per una read da 100 bp scriveva da
+solo più byte di tutto il resto dell'allineamento.
+
+**Perché resta byte-identical.** Tre argomenti distinti, uno per forma:
+
+1. *Store dello stesso valore su celle distinte* (`sp_init`, `vd_init`,
+   `sp_reset`, `vd_new_score`). Le voci di `sp_diags` sono diagonali distinte
+   perché `access_alloc` appende solo al primo tocco; le altre sono indicizzate
+   per costruzione. Chi scrive cosa è irrilevante.
+2. *Riduzione associativa* (`max_diag`). `max` su interi esatti non dipende
+   dall'ordine: è lo stesso numero della scansione seriale, non un'approssimazione.
+3. *Anticipo di scritture che nessuno rilegge* (write-back M). Il loop seriale
+   rendeva una cella visibile in `bs_m_wf` solo quando la raggiungeva. Scrivere
+   tutta la tile in anticipo è invisibile perché niente in quel loop legge
+   `bs_m_wf`: `core_store_m_jump` e la ricorsione di `core_extend_diagonal`
+   sotto di lui spingono solo in `bs_m_jumps_wf` e `bs_i_jumps_wf`, e ogni
+   iterazione legge solo la cella su cui si trova.
+
+Per non far divergere la versione seriale della CPU da quella parallela del
+kernel, il corpo di ogni loop vive in un posto solo: `sp_reset_one`,
+`vd_new_score_one`, `vd_map_fill_count`, e le metà scalari `sp_init_window`,
+`vd_init_scalar`, `vd_new_alignment_scalar`. `sp_init`, `vd_init`,
+`vd_new_alignment`, `sp_reset` e `vd_new_score` restano la somma delle due metà
+e sono ciò che la CPU continua a chiamare, invariate.
+
+**Effetto collaterale sulla shared.** Con il write-back diretto,
+`shared_m_cells` è morto: la shared dinamica per blocco passa da
+`2 × sizeof(Cell) + 2 × sizeof(int)` a `sizeof(Cell) + 2 × sizeof(int)`, cioè da
+**56 a 32 byte per thread** (a 256 thread: 14 336 → 8 192 B).
+
+**ptxas (sm_75), before/after.**
+
+| | registri | stack | spill | smem statica | smem dinamica |
+|---|---|---|---|---|---|
+| `835d0be` | 234 | 592 B | 0 | 192 B | 56 × thr |
+| Opt #4 | 234 | 592 B | 0 | 192 B | **32 × thr** |
+
+Registri, stack e spill **invariati**: la distribuzione non ha allargato il
+footprint per thread, e i registri (234) restano il limite di occupancy.
+
+**Tempo di kernel.** Mediana di 7 run interleaved before/after nello stesso
+istante termico, come impone la regola di misura sopra.
+
+| caso | before | after | speedup |
+|---|---|---|---|
+| c4_exact @64 | 6.685 ms | 6.703 ms | 0.997× |
+| c4_exact @256 | 14.219 ms | **5.993 ms** | **2.37×** |
+| c4_err @64 | 6.928 ms | 6.824 ms | 1.015× |
+| c4_err @256 | 19.751 ms | **6.431 ms** | **3.07×** |
+
+**Come leggere questi numeri — tre osservazioni.**
+
+1. **A 64 thread non cambia niente** (0.997× e 1.015×). Il guadagno è tutto a
+   256. Coerente con lo stall di barriera misurato dal profiling (5.8 a 64
+   contro 30+ a 256): a 64 thread ci sono due warp che aspettano thread 0, a 256
+   ce ne sono otto. Ma vuol dire anche che **a 64 thread il collo di bottiglia è
+   altrove**, e non è ancora stato identificato: va profilato, non spiegato a
+   tavolino.
+2. **256 thread non è più la configurazione peggiore.** Prima era sistematicamente
+   la più lenta (14.2 contro 6.7 su c4_exact); ora è la più veloce (5.99 contro
+   6.70). È un'inversione qualitativa, non solo un miglioramento.
+3. **La varianza è collassata.** I run "before" a 256 thread oscillavano fra
+   12.6 e 29.3 ms; quelli "after" fra 5.95 e 6.14. La coda lunga era il tempo
+   che gli 8 warp passavano fermi in barriera, e dipendeva da quanto lavoro
+   seriale capitava a quella query.
+
+**Cosa NON è stato toccato, e perché.**
+
+- **Il fan-out sugli archi uscenti** in `core_check_and_store_jumps` /
+  `core_store_m_jump` era stato ipotizzato di classe A. **Non lo è: è classe D.**
+  Ogni iterazione del loop sugli archi tocca tre strutture il cui ordine di
+  append è osservabile — `vd_activate_vertex` assegna l'indice attivo che diventa
+  `v_id` e indicizza `sc_*_pos`; `bs_push_back` restituisce la posizione che
+  diventa `prev_pos`, confrontato campo per campo dai golden; e
+  `core_extend_diagonal` ricorre dentro `core_store_m_jump`, quindi la sequenza
+  di push è un preorder DFS. Resta seriale.
+- **I merge (classe B)**: candidati I, `core_next_d_sparsify`,
+  `core_next_m_sparsify`. Restano seriali. Vedi la nota qui sotto: lo schema
+  atomicMax da solo non basta.
+- **La ricorsione mutua** `core_extend_diagonal` ↔ `core_store_m_jump`
+  (`align_core.h:140` e `293`). Classe D, fuori portata per intervento.
+
+**Nota per chi affronterà la classe B.** Lo schema ovvio — un `atomicMax` per
+diagonale su `(offset << 32) | (~indice)`, così il massimo è sull'offset e a
+parità vince l'indice più basso — riproduce il vincitore, ma **non basta**.
+`sp_access_alloc` appende la diagonale a `sp_diags` **al primo tocco**, e
+`densify` scorre `sp_diags` in quell'ordine: l'ordine di primo tocco determina
+l'ordine delle celle nel wavefront denso, quindi i `Range`, quindi i `prev_pos`
+delle onde successive. Serve una seconda riduzione (`atomicMin` sull'indice per
+ricostruire il primo toccante) più una compaction in ordine di indice — che è la
+stessa macchina ballot+prefisso di `densify`. Va anche risolto il
+dimensionamento dell'array temporaneo: una entry per diagonale su
+`kScratchpadSpan` sono 52 224 slot, troppi per la shared.
+
+**Verifica.** Regressione CPU-GPU su T4 dopo *ognuno* dei tre commit, non solo
+alla fine: `ebola_exact_smoke`, `c4_exact`, `ebola_error_smoke`, `c4_err` a
+64/128/256 thread — 12 run per commit, tutte PASS, output GPU identico ai golden
+dell'oracle campo per campo. Build non-CUDA e `ctest` 5/5 verdi a ogni passo.
+
+**Come rileggere le voci precedenti.** La riga «dopo Opt #3 (stato attuale)»
+nella tabella *Stato del kernel nel tempo* non è più lo stato attuale: la
+tabella ptxas qui sopra lo è. Registri, stack e smem statica sono invariati
+rispetto a Opt #3; è cambiata solo la smem dinamica (56 → 32 byte/thread). La
+sezione *Mappa del parallelismo* e la lista *Cosa resta* più sopra sono
+anteriori a questa voce; quelle aggiornate sono qui sotto.
+
+### Mappa del parallelismo dopo Opt #4
+
+Per ogni score e vertice attivo. `T` = thread/blocco, `A` = vertici attivi,
+`Δ` = `sp_ndiags`, `E` = grado uscente, `L` = lunghezza LCP.
+
+| fase | trip count | stato |
+|---|---|---|
+| init `sp_init` | `span / T` | **parallelo** (Opt #4) |
+| init `max_diag` | `V / T` + log | **parallelo** (Opt #4) |
+| init mappa vertice→indice | `V / T` | **parallelo** (Opt #4) |
+| `vd_expand` + `vd_compact` | `A × 3 × segmenti` | **parallelo** (Opt #2) |
+| costruzione candidati I | `nI / T` | **parallelo** (Opt #1) |
+| merge candidati I | `nI` | seriale — classe B |
+| densify I | `Δ × segmenti / T` | **parallelo** (Opt #3) |
+| `core_check_and_store_jumps` | `iCells × E × L` | seriale — classe D |
+| `sp_reset` (×3) | `Δ / T` | **parallelo** (Opt #4) |
+| sparsify D | `nD` | seriale — classe B |
+| densify D | `Δ × segmenti / T` | **parallelo** (Opt #3) |
+| sparsify M | `nM` | seriale — classe B |
+| densify M | `Δ × segmenti / T` | **parallelo** (Opt #3) |
+| estensione LCP celle M | `mCells × L / T` | **parallelo** |
+| write-back celle M | `mCells / T` | **parallelo** (Opt #4) |
+| end check + jump celle M | `mCells × E × L` | seriale — classe D |
+| `vd_new_score` | `A / T` | **parallelo** (Opt #4) |
+| loop sui vertici attivi | `A` | seriale |
+
+### Cosa resta dopo Opt #4, in ordine
+
+1. **Profilare a 64 thread.** È l'unico numero che Opt #4 non ha mosso, e non
+   sappiamo perché. Prima di scegliere il prossimo intervento serve sapere dove
+   va il tempo a quel block size, altrimenti si ottimizza al buio.
+2. **I merge di classe B** — candidati I, sparsify D e M. Fattibile ma non
+   naive: serve la doppia riduzione descritta sopra più il dimensionamento
+   dell'array temporaneo.
+3. **Il fan-out sugli out-edge** (classe D) — resta il candidato più grosso del
+   percorso per vertice, e resta quello che richiede offset da prefix-sum più una
+   worklist esplicita per la ricorsione.
+4. **Ridurre i registri** (234) — sono ancora il limite di occupancy, e ora che
+   la smem dinamica è scesa a 32 byte/thread lo sono in modo ancora più netto.
