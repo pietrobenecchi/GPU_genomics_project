@@ -643,3 +643,163 @@ Per ogni score e vertice attivo. `T` = thread/blocco, `A` = vertici attivi,
    worklist esplicita per la ricorsione.
 4. **Ridurre i registri** (234) — sono ancora il limite di occupancy, e ora che
    la smem dinamica è scesa a 32 byte/thread lo sono in modo ancora più netto.
+
+---
+
+## Opt #5 — Classe B: le tre fasi di merge
+
+**Categoria**: distribuzione sui thread di fasi con risoluzione di collisioni.
+
+**Stato di partenza**: `bf44fb6` (fine Opt #4). **Commit**: `cd1dd88`, `891f89e`,
+`654cb26`.
+
+**Avvertenza, scritta prima di misurare.** Il profiling della sezione precedente
+diceva che questa voce non avrebbe spostato i tempi: le fasi di merge sono
+O(candidati per vertice), decine di celle, contro 642 MB di memset che dominano
+il traffico. È stata fatta lo stesso per chiudere l'inventario dell'audit e
+perché è la parte che *sembrava* impossibile mantenere byte-identical. La
+previsione era ~1.0× e i numeri in fondo la confermano. Non è un fallimento
+dell'intervento: è il motivo per cui il prossimo va scelto dal profilo, non
+dall'inventario.
+
+**Il problema, che non è quello che sembra.** Le tre fasi — merge dei candidati
+I, `core_next_d_sparsify`, `core_next_m_sparsify` — fanno tutte la stessa cosa:
+
+```cpp
+Cell &cell = sp_access_alloc(qs, c.diag);
+if (cell.offset < c.offset) cell = c;
+```
+
+su una sequenza di candidati in ordine di indice. Sembra un massimo per
+diagonale. **Non lo è: gli effetti osservabili sono due.**
+
+1. **Il vincitore.** Il confronto è stretto, quindi un candidato successivo con
+   offset uguale non sostituisce mai il precedente: sopravvive l'argmax su
+   (offset, −indice).
+2. **L'ordine di `sp_diags`.** `access_alloc` appende la diagonale al primo
+   tocco, e `densify` scorre `sp_diags` in quell'ordine. L'ordine di append
+   decide l'ordine del wavefront denso → i `Range` → i `prev_pos` delle onde
+   successive, che è esattamente ciò su cui i golden sono confrontati campo per
+   campo.
+
+Il punto (2) è quello che uno schema "atomicMax sull'offset" sbaglierebbe **in
+silenzio**: produrrebbe le celle giuste nell'ordine sbagliato, e il primo
+sintomo sarebbe un `prev_pos` diverso molti score dopo.
+
+**Come sono riprodotti.** `merge_candidate_tile` lavora su una tile di
+candidati messa in shared, e per ogni thread calcola due predicati con una
+scansione O(tile) sulla tile:
+
+- *sono il vincitore* — nessun altro candidato valido sulla mia diagonale ha
+  offset maggiore, o offset uguale e indice minore;
+- *sono il primo toccante* — nessun candidato valido sulla mia diagonale ha
+  indice minore.
+
+Gli append dei primi toccanti sono numerati con `block_prefix_alloc`, cioè lo
+stesso allocatore a prefix-sum che `densify` usava già: è stato estratto e ora
+`densify` lo chiama, quindi nel kernel c'è **un solo schema di aggregazione, non
+due**. Ridurre la tile all'argmax e confrontarlo una volta con la cella già
+presente dà lo stesso risultato del confronto uno per uno, perché ciò che è già
+nella cella viene da un indice più piccolo e vince le proprie parità.
+
+**Sull'impacchettamento a 64 bit: i bit ci stanno, ma non serve.** La domanda
+era se `(offset << 32) | (~indice)` perde bit. Non li perde:
+
+- `offset` è una posizione nella query, non negativa, limitata dal filtro
+  `offset <= query_len` (100 bp nei dataset GGBS, `int32_t` in generale);
+- l'indice del candidato è limitato dallo spazio dei candidati di una fase,
+  cioè `kScopeWavefrontCapacity + kBeyondScopeCapacity + 2 × kMaxJumpsPerScore`
+  = **5 184**.
+
+Entrambi stanno in 32 bit con margini enormi. **Lo schema non è stato usato lo
+stesso**, per un motivo che non ha a che vedere con i bit: `atomicMax` vuole un
+array indicizzato per diagonale, e le diagonali vivono su `kScratchpadSpan` =
+52 224. Un array così non sta in shared, e in globale costerebbe più azzerarlo
+che eseguire il merge — lo stesso errore che il profiling ha appena trovato in
+`sp_init`. La scansione O(tile) per thread costa `blockDim.x` confronti in
+shared e non alloca niente.
+
+**Le fasi D e M hanno richiesto un'enumerazione unificata.**
+`core_next_d_sparsify` visita tre run in sequenza (indel sul wavefront D,
+`sparsify_m` su `bs_m_wf`, `sparsify_jumps` su `bs_m_jumps_wf`), M ne visita
+quattro. Senza un indice unico su tutto lo spazio l'ordine *fra* una run e
+l'altra andrebbe perso — ed è quell'ordine a decidere chi tocca per primo una
+diagonale. `SparsifyPlan` descrive le run in ordine e `make_sparsify_candidate`
+ricostruisce il candidato `idx` da solo; i tre `core_sparsify_*` differiscono
+solo per due cose (da dove viene l'indice sorgente, e se riscrivono
+`prev_pos`/`from_matrix`), quindi una sola descrizione li copre tutti.
+
+Il piano vive in shared, scritto da thread 0: sono 4 run da ~40 byte, e tenerlo
+nei registri di ogni thread avrebbe fatto spill proprio dove i registri sono il
+limite di occupancy. Le tile riusano `shared_i_candidates` e `shared_i_valid`,
+liberi a quel punto: **nessuna shared dinamica in più**.
+
+**Un limite noto, verificato invece che assunto.** Un candidato con offset
+negativo lascerebbe serialmente la cella a −1, facendola appendere una seconda
+volta dal candidato successivo; la versione parallela la appenderebbe una volta
+sola. Gli offset sono posizioni nella query e non sono mai negativi, quindi il
+caso è irraggiungibile — e `cap_fail` scatta se mai diventasse raggiungibile,
+invece di far divergere l'output in silenzio.
+
+**ptxas (sm_75), before/after.**
+
+| | registri | stack | spill | smem statica | smem dinamica |
+|---|---|---|---|---|---|
+| `bf44fb6` (Opt #4) | 234 | 592 B | 0 | 192 B | 32 × thr |
+| Opt #5 | 239 | 736 B | 0 | **368 B** | 32 × thr |
+
+I 176 byte di smem statica in più sono `SparsifyPlan`. I 5 registri in più non
+cambiano il limite di occupancy: 65 536 / 239 / 64 dà ancora 4 blocchi per SM a
+64 thread, come con 234.
+
+**Tempo di kernel.** Mediana di 7 run interleaved, stesso metodo di Opt #4.
+
+| caso | base (Opt #4) | classe B | speedup |
+|---|---|---|---|
+| c4_exact @64 | 6.767 ms | 6.673 ms | 1.014× |
+| c4_exact @256 | 6.022 ms | 6.068 ms | 0.992× |
+| c4_err @64 | 6.833 ms | 6.695 ms | 1.021× |
+| c4_err @256 | 6.393 ms | 6.521 ms | 0.980× |
+
+**Nessun cambiamento**, come previsto: tutto entro ±2%, cioè dentro il rumore
+del metodo. Il kernel resta bandwidth-bound.
+
+**Verifica.** Regressione CPU-GPU su T4 costruendo e validando **ogni commit
+separatamente**, non solo lo stato finale: `base`, `i_merge`, `d_sparsify`,
+`m_sparsify`, ognuno su `ebola_exact_smoke`, `c4_exact`, `ebola_error_smoke`,
+`c4_err` a 64/128/256 thread. 12 run per commit, tutte PASS.
+
+Il primo giro ha trovato un errore di compilazione in `i_merge`
+(`block_prefix_alloc` usata prima della definizione): i tre commit sono stati
+ricostruiti con la correzione al posto giusto, così ogni commit intermedio
+compila davvero e la validazione per-commit vale qualcosa.
+
+### Mappa del parallelismo dopo Opt #5
+
+Sostituisce quella di Opt #4 per le sole righe cambiate.
+
+| fase | trip count | stato |
+|---|---|---|
+| merge candidati I | `nI / T` | **parallelo** (Opt #5) |
+| sparsify D | `nD / T` | **parallelo** (Opt #5) |
+| sparsify M | `nM / T` | **parallelo** (Opt #5) |
+| `core_check_and_store_jumps` | `iCells × E × L` | seriale — classe D |
+| end check + jump celle M | `mCells × E × L` | seriale — classe D |
+| loop sui vertici attivi | `A` | seriale |
+
+Dentro `process_vertex` restano su thread 0 solo: la costruzione del piano
+(poche letture scalari), i due `sc_pos_push`, la lettura del range delle celle M
+e le due fasi di classe D. **L'inventario dell'audit è chiuso per le classi A e
+B**; restano C (che non vale la pena) e D.
+
+### Cosa resta dopo Opt #5, in ordine
+
+1. **Lo ScratchPad.** `sp_init` azzera 52 224 celle per query ed è l'80% delle
+   scritture DRAM. È l'unica cosa nel kernel che, secondo il profilo, possa
+   ancora cambiare i tempi in modo sostanziale. Non è parallelizzazione: è
+   restringere la finestra, o sostituire il sentinella con un contatore di
+   epoca, o azzerare una volta per batch invece che per query. Tutte e tre
+   toccano struttura dati o derivazione dei bound, quindi vanno progettate con
+   l'argomento di byte-identicità davanti, non dopo.
+2. **Il fan-out sugli out-edge** (classe D) — invariato rispetto a Opt #4.
+3. **Ridurre i registri** (239) — restano il limite di occupancy.
