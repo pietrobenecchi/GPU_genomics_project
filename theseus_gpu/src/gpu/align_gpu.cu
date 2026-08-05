@@ -103,11 +103,14 @@ void clear_error() { g_last_error[0] = '\0'; }
  */
 __global__ void seq_length_kernel(const int32_t *offsets, int32_t num_seqs,
                                   int32_t *out_seq_lengths) {
-    const int32_t i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= num_seqs) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+    const int32_t tid = bx * ntx + tx;
+    if (tid >= num_seqs) {
         return;
     }
-    out_seq_lengths[i] = offsets[i + 1] - offsets[i];
+    out_seq_lengths[tid] = offsets[tid + 1] - offsets[tid];
 }
 
 __device__ Range empty_range() {
@@ -218,9 +221,11 @@ constexpr int32_t kMaxWarps = 8;  // 256 threads, the largest block allowed
  */
 __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
                                       int32_t &shared_running) {
-    const int32_t lane = threadIdx.x & 31;
-    const int32_t warp = threadIdx.x >> 5;
-    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int32_t lane = tx & 31;
+    const int32_t warp = tx >> 5;
+    const int32_t nwarps = (ntx + 31) >> 5;
 
     // Every thread reaches the ballot, including the ones with flag 0, so the
     // warp stays converged.
@@ -231,7 +236,7 @@ __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
     }
     __syncthreads();
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         int32_t acc = shared_running;
         for (int32_t w = 0; w < nwarps; ++w) {
             const int32_t count = shared_warp_base[w];
@@ -295,10 +300,10 @@ __device__ void merge_candidate_tile(QueryState &qs,
                                      int32_t tile_len,
                                      int32_t *shared_warp_base,
                                      int32_t &shared_accum) {
-    const int32_t me = static_cast<int32_t>(threadIdx.x);
-    const bool mine = me < tile_len && shared_valid[me] != 0;
-    const int32_t my_diag = mine ? shared_cells[me].diag : 0;
-    const int32_t my_off = mine ? shared_cells[me].offset : 0;
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const bool mine = tx < tile_len && shared_valid[tx] != 0;
+    const int32_t my_diag = mine ? shared_cells[tx].diag : 0;
+    const int32_t my_off = mine ? shared_cells[tx].offset : 0;
 
     // Same guard as sp_access_alloc: out of window is a capacity failure, and
     // the candidate neither appends nor writes.
@@ -317,15 +322,15 @@ __device__ void merge_candidate_tile(QueryState &qs,
     bool is_first = in_range;
     if (in_range) {
         for (int32_t j = 0; j < tile_len; ++j) {
-            if (j == me || shared_valid[j] == 0 ||
+            if (j == tx || shared_valid[j] == 0 ||
                 shared_cells[j].diag != my_diag) {
                 continue;
             }
             const int32_t oj = shared_cells[j].offset;
-            if (oj > my_off || (oj == my_off && j < me)) {
+            if (oj > my_off || (oj == my_off && j < tx)) {
                 is_winner = false;
             }
-            if (j < me) {
+            if (j < tx) {
                 is_first = false;
             }
         }
@@ -337,7 +342,7 @@ __device__ void merge_candidate_tile(QueryState &qs,
     const bool needs_append = is_first && qs.sp_wf[idx].offset == -1;
     __syncthreads();
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         shared_accum = qs.sp_ndiags;
     }
     __syncthreads();
@@ -350,7 +355,7 @@ __device__ void merge_candidate_tile(QueryState &qs,
             cap_fail(qs, kCapScratchpadDiags, slot + 1, kScratchpadSpan);
         }
     }
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         qs.sp_ndiags =
             shared_accum < kScratchpadSpan ? shared_accum : kScratchpadSpan;
     }
@@ -358,7 +363,7 @@ __device__ void merge_candidate_tile(QueryState &qs,
 
     // One winner per diagonal, so no two threads write the same cell.
     if (is_winner && qs.sp_wf[idx].offset < my_off) {
-        qs.sp_wf[idx] = shared_cells[me];
+        qs.sp_wf[idx] = shared_cells[tx];
     }
     __syncthreads();
 }
@@ -510,11 +515,13 @@ __device__ bool make_sparsify_candidate(const SparsifyPlan &plan, int32_t idx,
  * Every thread of the block must call it: it contains barriers.
  */
 __device__ int32_t block_reduce_max(int32_t value, int32_t *shared_warp_base) {
-    const int32_t lane = threadIdx.x & 31;
-    const int32_t warp = threadIdx.x >> 5;
-    const int32_t nwarps = (static_cast<int32_t>(blockDim.x) + 31) >> 5;
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int32_t lane = tx & 31;
+    const int32_t warp = tx >> 5;
+    const int32_t nwarps = (ntx + 31) >> 5;
 
-    // blockDim.x is 64, 128 or 256, so every warp is full and the whole mask is
+    // ntx is 64, 128 or 256, so every warp is full and the whole mask is
     // the right one.
     for (int32_t delta = 16; delta > 0; delta >>= 1) {
         const int32_t other = __shfl_down_sync(0xffffffffu, value, delta);
@@ -527,7 +534,7 @@ __device__ int32_t block_reduce_max(int32_t value, int32_t *shared_warp_base) {
     }
     __syncthreads();
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         int32_t acc = shared_warp_base[0];
         for (int32_t w = 1; w < nwarps; ++w) {
             if (shared_warp_base[w] > acc) {
@@ -565,16 +572,18 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
                          Cell *wf, int32_t &wf_size, int32_t capacity,
                          CapBuffer cap_buffer, bool track_peak,
                          int32_t *shared_warp_base, int32_t &shared_accum) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
     const int32_t ndiags = qs.sp_ndiags;   // uniform: densify never touches it
     const int32_t range_start = wf_size;   // read before thread 0 updates it
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         shared_accum = 0;
     }
     __syncthreads();
 
-    for (int32_t tile = 0; tile < ndiags; tile += blockDim.x) {
-        const int32_t di = tile + static_cast<int32_t>(threadIdx.x);
+    for (int32_t tile = 0; tile < ndiags; tile += ntx) {
+        const int32_t di = tile + tx;
         int32_t flag = 0;
         Cell value{-1, -1, -1, -1, Cell::Matrix::None};
         if (di < ndiags) {
@@ -596,7 +605,7 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
         __syncthreads();   // shared_warp_base is reused by the next tile
     }
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         const int32_t total = shared_accum;
         const int32_t room = capacity - range_start;
         const int32_t fits = room > 0 ? room : 0;
@@ -628,13 +637,14 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
  * Every thread of the block must call it: it contains barriers.
  */
 __device__ void sp_reset_block(QueryState &qs) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
     const int32_t ndiags = qs.sp_ndiags;   // uniform: nothing writes it here
-    for (int32_t i = static_cast<int32_t>(threadIdx.x); i < ndiags;
-         i += static_cast<int32_t>(blockDim.x)) {
+    for (int32_t i = tx; i < ndiags; i += ntx) {
         sp_reset_one(qs, i);
     }
     __syncthreads();
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         qs.sp_ndiags = 0;
     }
     __syncthreads();
@@ -653,25 +663,26 @@ __device__ void run_sparsify_plan(QueryState &qs, const SparsifyPlan &plan,
                                   Cell *shared_cells, int *shared_valid,
                                   int32_t *shared_warp_base,
                                   int32_t &shared_accum) {
-    const int32_t tile = static_cast<int32_t>(blockDim.x);
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
     // Uniform: the plan lives in shared memory, written by thread 0 before the
     // barrier that got us here.
     const int32_t count = plan.total;
 
-    for (int32_t tile_start = 0; tile_start < count; tile_start += tile) {
-        const int32_t idx = tile_start + static_cast<int32_t>(threadIdx.x);
+    for (int32_t tile_start = 0; tile_start < count; tile_start += ntx) {
+        const int32_t idx = tile_start + tx;
         if (idx < count) {
             Cell candidate{-1, -1, -1, -1, Cell::Matrix::None};
             const bool valid = make_sparsify_candidate(plan, idx, candidate);
-            shared_cells[threadIdx.x] = candidate;
-            shared_valid[threadIdx.x] = valid ? 1 : 0;
+            shared_cells[tx] = candidate;
+            shared_valid[tx] = valid ? 1 : 0;
         } else {
-            shared_valid[threadIdx.x] = 0;
+            shared_valid[tx] = 0;
         }
         __syncthreads();
 
         const int32_t remaining = count - tile_start;
-        const int32_t lanes = remaining < tile ? remaining : tile;
+        const int32_t lanes = remaining < ntx ? remaining : ntx;
         merge_candidate_tile(qs, shared_cells, shared_valid, lanes,
                              shared_warp_base, shared_accum);
     }
@@ -681,11 +692,12 @@ __device__ Range finish_i_wavefront(QueryState &qs, int32_t score,
                                     int32_t v,
                                     int32_t *shared_warp_base,
                                     int32_t &shared_accum) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
     const Range new_range =
         densify(qs, Cell::Matrix::I, v, sc_i_wf(qs, score),
                 sc_i_wf_size(qs, score), kScopeWavefrontCapacity,
                 kCapScopeWavefront, true, shared_warp_base, shared_accum);
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
     }
     __syncthreads();
@@ -695,7 +707,7 @@ __device__ Range finish_i_wavefront(QueryState &qs, int32_t score,
 /**
  * @brief Build the I candidates for one vertex and merge them into the scratchpad.
  *
- * The candidate space is consumed one tile of blockDim.x elements at a time, the
+ * The candidate space is consumed one tile of ntx elements at a time, the
  * same way extend_and_consume_m_cells consumes the M range. Staging a
  * tile rather than the whole candidate space is what lets the shared buffers be
  * sized on the block instead of on kScopeWavefrontCapacity, and it removes the
@@ -716,7 +728,10 @@ __device__ void generate_and_merge_i_candidates(
                                                 Cell *shared_i_candidates, int *shared_i_valid,
                                                 int &shared_i_count, int32_t *shared_warp_base, int32_t &shared_accum,
                                                 int &block_end, Cell &block_end_cell) {
-    if (threadIdx.x == 0) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+
+    if (tx == 0) {
         shared_i_ranges = prepare_i_candidate_ranges(qs, scoring, graph,
                                                      score, v);
         shared_i_count = shared_i_ranges.total;
@@ -726,23 +741,22 @@ __device__ void generate_and_merge_i_candidates(
     // Uniform across the block: written by thread 0 before the barrier above, so
     // every thread runs the same number of tiles and reaches the same barriers.
     const int32_t count = shared_i_count;
-    const int32_t tile = static_cast<int32_t>(blockDim.x);
 
-    for (int32_t tile_start = 0; tile_start < count; tile_start += tile) {
-        const int32_t idx = tile_start + static_cast<int32_t>(threadIdx.x);
+    for (int32_t tile_start = 0; tile_start < count; tile_start += ntx) {
+        const int32_t idx = tile_start + tx;
         if (idx < count) {
             Cell candidate{-1, -1, -1, -1, Cell::Matrix::None};
             const bool valid = make_i_candidate(qs, shared_i_ranges, idx,
                                                 query_len, candidate);
-            shared_i_candidates[threadIdx.x] = candidate;
-            shared_i_valid[threadIdx.x] = valid ? 1 : 0;
+            shared_i_candidates[tx] = candidate;
+            shared_i_valid[tx] = valid ? 1 : 0;
         } else {
-            shared_i_valid[threadIdx.x] = 0;
+            shared_i_valid[tx] = 0;
         }
         __syncthreads();
 
         const int32_t remaining = count - tile_start;
-        const int32_t lanes = remaining < tile ? remaining : tile;
+        const int32_t lanes = remaining < ntx ? remaining : ntx;
         merge_candidate_tile(qs, shared_i_candidates, shared_i_valid, lanes,
                              shared_warp_base, shared_accum);
     }
@@ -750,7 +764,7 @@ __device__ void generate_and_merge_i_candidates(
     const Range new_range = finish_i_wavefront(qs, score, v,
                                                shared_warp_base,
                                                shared_accum);
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         // Same tail as the CPU's next_I: the I cells that just reached the last
         // column of this vertex open jumps into its neighbours.
         // core_store_m_jump can hit the end condition, so the block's end state
@@ -778,9 +792,12 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
                                            int *shared_m_valid,
                                            int &block_end,
                                            Cell &block_end_cell) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+
     for (int64_t chunk_start = range_start; chunk_start < range_end;
-         chunk_start += blockDim.x) {
-        const int64_t idx = chunk_start + threadIdx.x;
+         chunk_start += ntx) {
+        const int64_t idx = chunk_start + tx;
         if (idx < range_end) {
             Cell cell = qs.bs_m_wf[idx];
             int32_t j = cell.diag + cell.offset;
@@ -793,16 +810,16 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
             // recursion under it push into bs_m_jumps_wf and bs_i_jumps_wf
             // only, and each iteration reads just the cell it is on.
             qs.bs_m_wf[idx] = cell;
-            shared_m_valid[threadIdx.x] = 1;
+            shared_m_valid[tx] = 1;
         } else {
-            shared_m_valid[threadIdx.x] = 0;
+            shared_m_valid[tx] = 0;
         }
         __syncthreads();
 
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             bool end = block_end != 0;
             Cell end_cell = block_end_cell;
-            for (int32_t lane = 0; lane < blockDim.x; ++lane) {
+            for (int32_t lane = 0; lane < ntx; ++lane) {
                 if (shared_m_valid[lane] == 0) {
                     continue;
                 }
@@ -843,7 +860,9 @@ __device__ void process_vertex(QueryState &qs,
                                int32_t &shared_accum,
                                int &block_end,
                                Cell &block_end_cell) {
-    if (threadIdx.x == 0) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+
+    if (tx == 0) {
         shared_range_start = 0;
         shared_range_end = 0;
 
@@ -860,7 +879,7 @@ __device__ void process_vertex(QueryState &qs,
     // Reset, sparsify and densify are all block-wide now. Only the plan itself
     // is built on thread 0, and it is a handful of scalar reads.
     sp_reset_block(qs);
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         shared_sparsify_plan =
             prepare_d_sparsify_plan(qs, scoring, query_len, graph, score, v);
     }
@@ -873,14 +892,14 @@ __device__ void process_vertex(QueryState &qs,
                     sc_d_wf_size(qs, score), kScopeWavefrontCapacity,
                     kCapScopeWavefront, true, shared_warp_base,
                     shared_accum);
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), d_range);
         }
     }
     __syncthreads();
 
     sp_reset_block(qs);
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         shared_sparsify_plan =
             prepare_m_sparsify_plan(qs, scoring, query_len, graph, score, v);
     }
@@ -892,14 +911,14 @@ __device__ void process_vertex(QueryState &qs,
             densify(qs, Cell::Matrix::M, v, qs.bs_m_wf, qs.bs_m_wf_size,
                     kBeyondScopeCapacity, kCapBeyondScope, false,
                     shared_warp_base, shared_accum);
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), m_range);
         }
     }
     __syncthreads();
 
     sp_reset_block(qs);
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         const int32_t v_pos = vd_get_id(qs, v);
         if (!qs.capacity_exceeded && v_pos >= 0 &&
             sc_m_pos_size(qs, score) > v_pos) {
@@ -928,9 +947,11 @@ __device__ void process_vertex(QueryState &qs,
  */
 __device__ void expand_and_compact(QueryState &qs,
                                    int &shared_num_active) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
     const int num_active = qs.vd_num_active;
     const int g = qs.vd_gape;
-    for (int a = threadIdx.x; a < num_active; a += blockDim.x) {
+    for (int a = tx; a < num_active; a += ntx) {
         vd_expand_vec(qs.vd_m_invalid[a], qs.vd_m_invalid_size[a], g, g);
         vd_expand_vec(qs.vd_i_invalid[a], qs.vd_i_invalid_size[a], g, g);
         vd_expand_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
@@ -942,7 +963,7 @@ __device__ void expand_and_compact(QueryState &qs,
             vd_compact_vec(qs.vd_d_invalid[a], qs.vd_d_invalid_size[a], g, g);
     }
     __syncthreads();
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         shared_num_active = vd_num_active_vertices(qs);
     }
     __syncthreads();
@@ -968,10 +989,12 @@ __device__ void compute_new_wave(QueryState &qs,
                                  int32_t &shared_accum,
                                  int &block_end,
                                  Cell &block_end_cell) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+
     expand_and_compact(qs, shared_num_active);
 
     for (int32_t l = 0; l < shared_num_active; ++l) {
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             shared_vertex = vd_get_vertex_id(qs, l);
         }
         __syncthreads();
@@ -1008,12 +1031,14 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int32_t &shared_accum,
                           int32_t &shared_span,
                           Cell &block_end_cell) {
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+
     // The longest vertex of the graph, which sizes the ScratchPad window: a max
     // over the whole graph, so the block reduces it instead of thread 0 scanning
     // num_vertices on its own.
     int32_t local_max_diag = 0;
-    for (int32_t v = static_cast<int32_t>(threadIdx.x); v < graph.num_vertices;
-         v += static_cast<int32_t>(blockDim.x)) {
+    for (int32_t v = tx; v < graph.num_vertices; v += ntx) {
         const int32_t n = vertex_len(graph, v);
         if (n > local_max_diag) {
             local_max_diag = n;
@@ -1021,7 +1046,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     }
     const int32_t max_diag = block_reduce_max(local_max_diag, shared_warp_base);
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         qs.capacity_exceeded = false;
         // Scalar halves only; the block runs both clearing loops below.
         shared_span = sp_init_window(qs, -query_len, max_diag);
@@ -1043,17 +1068,15 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     // the same -1, one right after the other, so the two loops collapse into
     // this one pass with no change to the state either produced.
     const int32_t vd_fill = vd_map_fill_count(graph.num_vertices);
-    for (int32_t i = static_cast<int32_t>(threadIdx.x); i < shared_span;
-         i += static_cast<int32_t>(blockDim.x)) {
+    for (int32_t i = tx; i < shared_span; i += ntx) {
         qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
     }
-    for (int32_t i = static_cast<int32_t>(threadIdx.x); i < vd_fill;
-         i += static_cast<int32_t>(blockDim.x)) {
+    for (int32_t i = tx; i < vd_fill; i += ntx) {
         qs.vd_vertex_to_idx[i] = -1;
     }
     __syncthreads();
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         block_score = 0;
         block_end = 0;
         block_end_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
@@ -1075,7 +1098,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     __syncthreads();
 
     while (true) {
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             block_continue = (block_end == 0 && !qs.capacity_exceeded) ? 1 : 0;
         }
         __syncthreads();
@@ -1085,7 +1108,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
             break;
         }
 
-        if (threadIdx.x == 0 && block_score == 0) {
+        if (tx == 0 && block_score == 0) {
             bool end = block_end != 0;
             Cell end_cell = block_end_cell;
             core_extend_diagonal(qs, query, query_len, graph, block_score,
@@ -1106,7 +1129,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                          shared_warp_base, shared_accum,
                          block_end, block_end_cell);
 
-        if (threadIdx.x == 0) {
+        if (tx == 0) {
             ++block_score;
             sc_new_score(qs, block_score);
         }
@@ -1118,15 +1141,14 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
         // bumped it before the barrier) and nothing writes vd_num_active here.
         {
             const int pos = vd_new_score_slot(qs, block_score);
-            for (int a = static_cast<int>(threadIdx.x); a < qs.vd_num_active;
-                 a += static_cast<int>(blockDim.x)) {
+            for (int a = tx; a < qs.vd_num_active; a += ntx) {
                 vd_new_score_one(qs, a, pos);
             }
         }
         __syncthreads();
     }
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         --block_score;
         result.score = block_score;
         result.end_vertex_id = block_end_cell.vertex_id;
@@ -1147,8 +1169,12 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
                                            AlignScoring scoring,
                                            QueryState *states,
                                            AlignResult *results) {
-    const int32_t query_id = blockIdx.x;
-    const int32_t tid = threadIdx.x;
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+
+    // One block per query: the block index is the query index.
+    const int32_t query_id = bx;
     if (query_id >= batch.num_seqs) {
         return;
     }
@@ -1170,15 +1196,15 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
     __shared__ int32_t shared_span;
     __shared__ Cell block_end_cell;
 
-    // One tile per staging buffer, sized at launch on blockDim.x. Cell first
+    // One tile per staging buffer, sized at launch on ntx. Cell first
     // because it is the most strictly aligned member; the layout must match
     // kernel_shared_bytes().
     extern __shared__ unsigned char smem[];
     Cell *shared_i_candidates = reinterpret_cast<Cell *>(smem);
-    int *shared_i_valid = reinterpret_cast<int *>(shared_i_candidates + blockDim.x);
-    int *shared_m_valid = shared_i_valid + blockDim.x;
+    int *shared_i_valid = reinterpret_cast<int *>(shared_i_candidates + ntx);
+    int *shared_m_valid = shared_i_valid + ntx;
 
-    if (tid == 0) {
+    if (tx == 0) {
         block_continue = 0;
         block_end = 0;
         block_score = 0;
@@ -1218,25 +1244,30 @@ __global__ void graph_readback_kernel(GraphCsrView graph,
                                       int32_t *out_edge_targets,
                                       int32_t *out_edge_overlaps,
                                       int32_t *out_edge_offsets) {
-    const int32_t v = blockIdx.x;
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+
+    // One block per vertex: the block index is the vertex id.
+    const int32_t v = bx;
     if (v >= graph.num_vertices) {
         return;
     }
 
     const int32_t text_begin = graph.vertex_offsets[v];
     const int32_t text_end = graph.vertex_offsets[v + 1];
-    for (int32_t i = text_begin + threadIdx.x; i < text_end; i += blockDim.x) {
+    for (int32_t i = text_begin + tx; i < text_end; i += ntx) {
         out_vertex_chars[i] = graph.vertex_chars[i];
     }
 
     const int32_t edge_begin = graph.edge_offsets[v];
     const int32_t edge_end = graph.edge_offsets[v + 1];
-    for (int32_t e = edge_begin + threadIdx.x; e < edge_end; e += blockDim.x) {
+    for (int32_t e = edge_begin + tx; e < edge_end; e += ntx) {
         out_edge_targets[e] = graph.edge_targets[e];
         out_edge_overlaps[e] = graph.edge_overlaps[e];
     }
 
-    if (threadIdx.x == 0) {
+    if (tx == 0) {
         out_vertex_offsets[v] = text_begin;
         out_edge_offsets[v] = edge_begin;
         if (v == graph.num_vertices - 1) {
