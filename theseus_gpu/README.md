@@ -26,8 +26,12 @@ cmake --build build -j
 ./build/apps/seq2graph_proxy \
   -g data/sample_graph.gfa \
   -s data/sample_queries.fasta \
-  -f data/sample_output.gaf
+  -f build/sample_output.gaf
 ```
+
+The output goes into `build/` on purpose: `data/` holds inputs only, and the
+frozen expected output is `baseline/sample_output.gaf`, which ctest compares
+against.
 
 Input FASTA metadata format per sequence:
 ```text

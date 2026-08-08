@@ -17,6 +17,11 @@ external_datasets/
 # under golden/ are tracked; these are just the outputs being compared to them.
 theseus_gpu/data/validation/ggbs/gpu_results/
 
+# Ad-hoc run output. data/ holds inputs only; the expected sample output is
+# baseline/sample_output.gaf, which is tracked.
+theseus_gpu/data/sample_output.gaf
+theseus_gpu/validation_runs/
+
 # Agent instruction and handoff documents. Kept out of the repository on
 # purpose: they are working notes addressed to a tool, not project source.
 CLAUDE.md
