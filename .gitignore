@@ -28,8 +28,11 @@ CLAUDE.md
 HANDOFF.md
 GPU_PORT_PROMPT.md
 **/GPU_PORT_PROMPT.md
-theseus_gpu/docs/gpu_agent_handoff.md
 .claude/
+
+# Working notes and analyses. Kept on disk but out of the repository, including
+# docs/optimization_log.md: it stays append-only, it is just no longer tracked.
+theseus_gpu/docs/
 
 __pycache__/
 **/__pycache__/
