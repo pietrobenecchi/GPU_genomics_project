@@ -1,0 +1,4 @@
+Time (%),Total Time (ns),Instances,Avg (ns),Med (ns),Min (ns),Max (ns),StdDev (ns),Name
+93.0,991930,1,991930.0,991930.0,991930,991930,0.0,"theseus::gpu::<unnamed>::theseus_align_batch_kernel(theseus::gpu::BatchView, theseus::gpu::GraphCsrView, const int *, const int *, theseus::gpu::AlignScoring, theseus::QueryState *, theseus::gpu::AlignResult *)"
+6.8,72544,1,72544.0,72544.0,72544,72544,0.0,"theseus::gpu::<unnamed>::graph_readback_kernel(theseus::gpu::GraphCsrView, char *, int *, int *, int *, int *)"
+0.2,1824,1,1824.0,1824.0,1824,1824,0.0,"theseus::gpu::<unnamed>::seq_length_kernel(const int *, int, int *)"
