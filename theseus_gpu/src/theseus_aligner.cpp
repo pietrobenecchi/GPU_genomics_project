@@ -222,7 +222,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     options.threads_per_block = gpu_threads_per_block;
 
     const gpu::Status status = gpu::align_batch(
-        view, device_graph, start_node_ids.data(), start_offset_values.data(),
+        view, device_graph, aligner_impl_->device_workspace(),
+        start_node_ids.data(), start_offset_values.data(),
         aligner_impl_->gpu_scoring(), options, device_results.data(),
         device_states.data(), device_lengths.data());
 

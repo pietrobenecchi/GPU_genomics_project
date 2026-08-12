@@ -55,6 +55,7 @@ TheseusAlignerImpl::TheseusAlignerImpl(const Penalties &penalties,
 }
 
 TheseusAlignerImpl::~TheseusAlignerImpl() {
+    gpu::free_workspace(_device_workspace);
     gpu::free_graph(_device_graph);
 }
 
@@ -62,6 +63,7 @@ gpu::DeviceGraph *TheseusAlignerImpl::device_graph() {
     if (!_device_graph_attempted) {
         _device_graph_attempted = true;
         _device_graph = gpu::upload_graph(_graph_csr->view());
+        if (_device_graph != nullptr) _device_workspace = gpu::create_workspace();
     }
     return _device_graph;
 }

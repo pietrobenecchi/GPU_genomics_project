@@ -120,6 +120,7 @@ public:
      * @return Handle owned by this object, or nullptr if no device is usable
      */
     gpu::DeviceGraph *device_graph();
+    gpu::DeviceWorkspace *device_workspace() const { return _device_workspace; }
 
     /**
      * @brief Host-side lookup used before launching a GPU batch. Kernels receive
@@ -459,6 +460,7 @@ private:
 
     std::unique_ptr<gpu::GraphCsr> _graph_csr;
     gpu::DeviceGraph *_device_graph = nullptr;
+    gpu::DeviceWorkspace *_device_workspace = nullptr;
     bool _device_graph_attempted = false;   // Guards against retrying a failed upload
 
     std::string_view _seq;

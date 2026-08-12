@@ -73,6 +73,13 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
   std::vector<theseus::Alignment> gpu_alignments =
       gpu.align_batch_gpu(seqs, starts, offsets, &report, 128);
 
+  // Run the identical batch again on the same aligner. Besides checking that
+  // stale QueryState contents cannot affect correctness, this exercises the
+  // persistent device workspace at stable query and batch capacities.
+  theseus::GpuBatchReport reuse_report;
+  std::vector<theseus::Alignment> reused_alignments =
+      gpu.align_batch_gpu(seqs, starts, offsets, &reuse_report, 128);
+
   bool ok = true;
   if (require_device && !report.aligned_on_device) {
     std::cerr << name << ": CUDA alignment did not run: " << report.message
@@ -85,7 +92,8 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
               << report.message << "\n";
     ok = false;
   }
-  if (gpu_alignments.size() != cpu_alignments.size()) {
+  if (gpu_alignments.size() != cpu_alignments.size() ||
+      reused_alignments.size() != cpu_alignments.size()) {
     std::cerr << name << ": result count mismatch\n";
     return false;
   }
@@ -94,6 +102,11 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
       std::cerr << name << ": alignment mismatch at query " << i
                 << " cpu_score=" << score_alignment(cpu_alignments[i])
                 << " gpu_score=" << score_alignment(gpu_alignments[i]) << "\n";
+      ok = false;
+    }
+    if (!same_alignment(cpu_alignments[i], reused_alignments[i])) {
+      std::cerr << name << ": reused-workspace alignment mismatch at query "
+                << i << "\n";
       ok = false;
     }
   }

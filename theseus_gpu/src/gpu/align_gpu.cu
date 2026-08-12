@@ -1368,12 +1368,39 @@ struct DeviceGraph {
     int32_t num_edges = 0;
 };
 
+struct DeviceWorkspace {
+    char *chars = nullptr;
+    int32_t *offsets = nullptr;
+    int32_t *start_node_ids = nullptr;
+    int32_t *start_offsets = nullptr;
+    AlignResult *results = nullptr;
+    QueryState *states = nullptr;
+    int32_t *lengths = nullptr;
+    size_t query_capacity = 0;
+    size_t batch_capacity = 0;
+};
+
+DeviceWorkspace *create_workspace() { return new DeviceWorkspace(); }
+
+void free_workspace(DeviceWorkspace *workspace) {
+    if (workspace == nullptr) return;
+    cudaFree(workspace->chars);
+    cudaFree(workspace->offsets);
+    cudaFree(workspace->start_node_ids);
+    cudaFree(workspace->start_offsets);
+    cudaFree(workspace->results);
+    cudaFree(workspace->states);
+    cudaFree(workspace->lengths);
+    delete workspace;
+}
+
 const char *last_error() { return g_last_error; }
 
 const TimingReport &last_timing() { return g_last_timing; }
 
 Status align_batch(const BatchView &batch,
                    const DeviceGraph *graph,
+                   DeviceWorkspace *workspace,
                    const int32_t *start_node_ids,
                    const int32_t *start_offsets,
                    AlignScoring scoring,
@@ -1387,7 +1414,7 @@ Status align_batch(const BatchView &batch,
     if (batch.num_seqs <= 0) {
         return Status::NotImplemented;
     }
-    if (graph == nullptr) {
+    if (graph == nullptr || workspace == nullptr) {
         return Status::NoDevice;
     }
 
@@ -1407,13 +1434,13 @@ Status align_batch(const BatchView &batch,
     const size_t results_bytes = sizeof(AlignResult) * static_cast<size_t>(batch.num_seqs);
     const size_t states_bytes = sizeof(QueryState) * static_cast<size_t>(batch.num_seqs);
 
-    char *d_chars = nullptr;
-    int32_t *d_offsets = nullptr;
-    int32_t *d_start_node_ids = nullptr;
-    int32_t *d_start_offsets = nullptr;
-    AlignResult *d_results = nullptr;
-    QueryState *d_states = nullptr;
-    int32_t *d_lengths = nullptr;
+    char *d_chars = workspace->chars;
+    int32_t *d_offsets = workspace->offsets;
+    int32_t *d_start_node_ids = workspace->start_node_ids;
+    int32_t *d_start_offsets = workspace->start_offsets;
+    AlignResult *d_results = workspace->results;
+    QueryState *d_states = workspace->states;
+    int32_t *d_lengths = workspace->lengths;
     BatchView device_batch{nullptr, nullptr, 0};
     Status status = Status::Ok;
     cudaEvent_t ev_start = nullptr;
@@ -1430,48 +1457,57 @@ Status align_batch(const BatchView &batch,
     // initialisation is ill-formed.
     const size_t smem_bytes = kernel_shared_bytes(threads_per_block);
 
-    // Single exit path: every allocation below is released at `cleanup`.
-    err = cudaMalloc(&d_chars, chars_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(chars)", err);
-        status = Status::CudaError;
-        goto cleanup;
+    if (chars_bytes > workspace->query_capacity) {
+        char *grown = nullptr;
+        err = cudaMalloc(&grown, chars_bytes);
+        if (err != cudaSuccess) {
+            set_error("cudaMalloc(chars)", err);
+            status = Status::CudaError;
+            goto cleanup;
+        }
+        if (workspace->chars != nullptr) cudaFree(workspace->chars);
+        workspace->chars = d_chars = grown;
+        workspace->query_capacity = chars_bytes;
     }
-    err = cudaMalloc(&d_offsets, offsets_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(offsets)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMalloc(&d_start_node_ids, per_query_i32_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(start_node_ids)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMalloc(&d_start_offsets, per_query_i32_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(start_offsets)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMalloc(&d_results, results_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(results)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMalloc(&d_states, states_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(query_states)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMalloc(&d_lengths, lengths_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMalloc(lengths)", err);
-        status = Status::CudaError;
-        goto cleanup;
+    if (static_cast<size_t>(batch.num_seqs) > workspace->batch_capacity) {
+        int32_t *grown_offsets = nullptr;
+        int32_t *grown_start_node_ids = nullptr;
+        int32_t *grown_start_offsets = nullptr;
+        AlignResult *grown_results = nullptr;
+        QueryState *grown_states = nullptr;
+        int32_t *grown_lengths = nullptr;
+#define ALLOC_GROWN(ptr, bytes, label)                                      \
+        do {                                                                \
+            err = cudaMalloc(&(ptr), (bytes));                              \
+            if (err != cudaSuccess) {                                       \
+                set_error((label), err);                                    \
+                cudaFree(grown_offsets); cudaFree(grown_start_node_ids);    \
+                cudaFree(grown_start_offsets); cudaFree(grown_results);     \
+                cudaFree(grown_states); cudaFree(grown_lengths);            \
+                status = Status::CudaError;                                 \
+                goto cleanup;                                               \
+            }                                                               \
+        } while (false)
+        ALLOC_GROWN(grown_offsets, offsets_bytes, "cudaMalloc(offsets)");
+        ALLOC_GROWN(grown_start_node_ids, per_query_i32_bytes, "cudaMalloc(start_node_ids)");
+        ALLOC_GROWN(grown_start_offsets, per_query_i32_bytes, "cudaMalloc(start_offsets)");
+        ALLOC_GROWN(grown_results, results_bytes, "cudaMalloc(results)");
+        ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
+        ALLOC_GROWN(grown_lengths, lengths_bytes, "cudaMalloc(lengths)");
+#undef ALLOC_GROWN
+        if (workspace->offsets != nullptr) cudaFree(workspace->offsets);
+        if (workspace->start_node_ids != nullptr) cudaFree(workspace->start_node_ids);
+        if (workspace->start_offsets != nullptr) cudaFree(workspace->start_offsets);
+        if (workspace->results != nullptr) cudaFree(workspace->results);
+        if (workspace->states != nullptr) cudaFree(workspace->states);
+        if (workspace->lengths != nullptr) cudaFree(workspace->lengths);
+        workspace->offsets = d_offsets = grown_offsets;
+        workspace->start_node_ids = d_start_node_ids = grown_start_node_ids;
+        workspace->start_offsets = d_start_offsets = grown_start_offsets;
+        workspace->results = d_results = grown_results;
+        workspace->states = d_states = grown_states;
+        workspace->lengths = d_lengths = grown_lengths;
+        workspace->batch_capacity = static_cast<size_t>(batch.num_seqs);
     }
 
     cudaEventCreate(&ev_start);
@@ -1503,12 +1539,6 @@ Status align_batch(const BatchView &batch,
     err = cudaMemcpy(d_start_offsets, start_offsets, per_query_i32_bytes, cudaMemcpyHostToDevice);
     if (err != cudaSuccess) {
         set_error("cudaMemcpy(start_offsets H2D)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMemset(d_results, 0, results_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMemset(results)", err);
         status = Status::CudaError;
         goto cleanup;
     }
@@ -1586,13 +1616,6 @@ Status align_batch(const BatchView &batch,
     }
 
 cleanup:
-    cudaFree(d_chars);
-    cudaFree(d_offsets);
-    cudaFree(d_start_node_ids);
-    cudaFree(d_start_offsets);
-    cudaFree(d_results);
-    cudaFree(d_states);
-    cudaFree(d_lengths);
     if (ev_start != nullptr) cudaEventDestroy(ev_start);
     if (ev_h2d != nullptr) cudaEventDestroy(ev_h2d);
     if (ev_kernel != nullptr) cudaEventDestroy(ev_kernel);

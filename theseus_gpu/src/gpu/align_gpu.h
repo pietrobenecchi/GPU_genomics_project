@@ -93,6 +93,7 @@ struct TimingReport {
  * which is what keeps CUDA types out of code compiled by the host compiler.
  */
 struct DeviceGraph;
+struct DeviceWorkspace;
 
 enum class Status {
     Ok,              // Batch aligned on the device
@@ -145,6 +146,7 @@ const TimingReport &last_timing();
  */
 Status align_batch(const BatchView &batch,
                    const DeviceGraph *graph,
+                   DeviceWorkspace *workspace,
                    const int32_t *start_node_ids,
                    const int32_t *start_offsets,
                    AlignScoring scoring,
@@ -152,6 +154,9 @@ Status align_batch(const BatchView &batch,
                    AlignResult *out_results,
                    void *out_query_states,
                    int32_t *out_seq_lengths);
+
+DeviceWorkspace *create_workspace();
+void free_workspace(DeviceWorkspace *workspace);
 
 /**
  * @brief Copy the graph to device memory, once.

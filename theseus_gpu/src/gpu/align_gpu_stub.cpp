@@ -16,10 +16,13 @@ const TimingReport &last_timing() {
     return timing;
 }
 
-Status align_batch(const BatchView &, const DeviceGraph *, const int32_t *,
+Status align_batch(const BatchView &, const DeviceGraph *, DeviceWorkspace *, const int32_t *,
                    const int32_t *, AlignScoring, AlignOptions, AlignResult *, void *, int32_t *) {
     return Status::NotCompiled;
 }
+
+DeviceWorkspace *create_workspace() { return nullptr; }
+void free_workspace(DeviceWorkspace *) {}
 
 DeviceGraph *upload_graph(const GraphCsrView &) { return nullptr; }
 
