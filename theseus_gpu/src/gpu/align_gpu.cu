@@ -17,6 +17,7 @@
 #include <cuda_runtime.h>
 
 #include <cstdio>
+#include <vector>
 
 namespace theseus {
 namespace gpu {
@@ -1231,6 +1232,34 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
               block_end_cell);
 }
 
+struct TracebackMeta {
+    int32_t m_size;
+    int32_t m_jumps_size;
+    int32_t i_jumps_size;
+    int32_t peak_wf;
+    int32_t cap_required;
+    int32_t cap_available;
+    int8_t capacity_exceeded;
+    int8_t cap_reason;
+    int8_t reserved[2];
+};
+
+__global__ void traceback_meta_kernel(const QueryState *states, int32_t count,
+                                      TracebackMeta *metadata) {
+    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (i >= count) return;
+    const QueryState &state = states[i];
+    metadata[i] = TracebackMeta{state.bs_m_wf_size,
+                                state.bs_m_jumps_wf_size,
+                                state.bs_i_jumps_wf_size,
+                                state.sc_peak_wf,
+                                state.cap_required,
+                                state.cap_available,
+                                static_cast<int8_t>(state.capacity_exceeded),
+                                state.cap_reason,
+                                {0, 0}};
+}
+
 /**
  * @brief Copy the CSR back out, one block per vertex.
  *
@@ -1376,6 +1405,7 @@ struct DeviceWorkspace {
     AlignResult *results = nullptr;
     QueryState *states = nullptr;
     int32_t *lengths = nullptr;
+    TracebackMeta *traceback_meta = nullptr;
     size_t query_capacity = 0;
     size_t batch_capacity = 0;
 };
@@ -1391,6 +1421,7 @@ void free_workspace(DeviceWorkspace *workspace) {
     cudaFree(workspace->results);
     cudaFree(workspace->states);
     cudaFree(workspace->lengths);
+    cudaFree(workspace->traceback_meta);
     delete workspace;
 }
 
@@ -1441,6 +1472,7 @@ Status align_batch(const BatchView &batch,
     AlignResult *d_results = workspace->results;
     QueryState *d_states = workspace->states;
     int32_t *d_lengths = workspace->lengths;
+    TracebackMeta *d_traceback_meta = workspace->traceback_meta;
     BatchView device_batch{nullptr, nullptr, 0};
     Status status = Status::Ok;
     cudaEvent_t ev_start = nullptr;
@@ -1476,6 +1508,7 @@ Status align_batch(const BatchView &batch,
         AlignResult *grown_results = nullptr;
         QueryState *grown_states = nullptr;
         int32_t *grown_lengths = nullptr;
+        TracebackMeta *grown_traceback_meta = nullptr;
 #define ALLOC_GROWN(ptr, bytes, label)                                      \
         do {                                                                \
             err = cudaMalloc(&(ptr), (bytes));                              \
@@ -1484,6 +1517,7 @@ Status align_batch(const BatchView &batch,
                 cudaFree(grown_offsets); cudaFree(grown_start_node_ids);    \
                 cudaFree(grown_start_offsets); cudaFree(grown_results);     \
                 cudaFree(grown_states); cudaFree(grown_lengths);            \
+                cudaFree(grown_traceback_meta);                             \
                 status = Status::CudaError;                                 \
                 goto cleanup;                                               \
             }                                                               \
@@ -1494,6 +1528,9 @@ Status align_batch(const BatchView &batch,
         ALLOC_GROWN(grown_results, results_bytes, "cudaMalloc(results)");
         ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
         ALLOC_GROWN(grown_lengths, lengths_bytes, "cudaMalloc(lengths)");
+        ALLOC_GROWN(grown_traceback_meta,
+                    sizeof(TracebackMeta) * static_cast<size_t>(batch.num_seqs),
+                    "cudaMalloc(traceback_meta)");
 #undef ALLOC_GROWN
         if (workspace->offsets != nullptr) cudaFree(workspace->offsets);
         if (workspace->start_node_ids != nullptr) cudaFree(workspace->start_node_ids);
@@ -1501,12 +1538,14 @@ Status align_batch(const BatchView &batch,
         if (workspace->results != nullptr) cudaFree(workspace->results);
         if (workspace->states != nullptr) cudaFree(workspace->states);
         if (workspace->lengths != nullptr) cudaFree(workspace->lengths);
+        if (workspace->traceback_meta != nullptr) cudaFree(workspace->traceback_meta);
         workspace->offsets = d_offsets = grown_offsets;
         workspace->start_node_ids = d_start_node_ids = grown_start_node_ids;
         workspace->start_offsets = d_start_offsets = grown_start_offsets;
         workspace->results = d_results = grown_results;
         workspace->states = d_states = grown_states;
         workspace->lengths = d_lengths = grown_lengths;
+        workspace->traceback_meta = d_traceback_meta = grown_traceback_meta;
         workspace->batch_capacity = static_cast<size_t>(batch.num_seqs);
     }
 
@@ -1584,6 +1623,15 @@ Status align_batch(const BatchView &batch,
         cudaEventRecord(ev_kernel);
     }
 
+    traceback_meta_kernel<<<blocks, threads_per_block>>>(
+        d_states, batch.num_seqs, d_traceback_meta);
+    err = cudaGetLastError();
+    if (err != cudaSuccess) {
+        set_error("traceback_meta_kernel launch", err);
+        status = Status::CudaError;
+        goto cleanup;
+    }
+
     err = cudaMemcpy(out_seq_lengths, d_lengths, lengths_bytes, cudaMemcpyDeviceToHost);
     if (err != cudaSuccess) {
         set_error("cudaMemcpy(lengths D2H)", err);
@@ -1597,12 +1645,45 @@ Status align_batch(const BatchView &batch,
         goto cleanup;
     }
     if (out_query_states != nullptr) {
-        err = cudaMemcpy(out_query_states, d_states, states_bytes, cudaMemcpyDeviceToHost);
+        std::vector<TracebackMeta> metadata(static_cast<size_t>(batch.num_seqs));
+        err = cudaMemcpy(metadata.data(), d_traceback_meta,
+                         sizeof(TracebackMeta) * metadata.size(),
+                         cudaMemcpyDeviceToHost);
         if (err != cudaSuccess) {
-            set_error("cudaMemcpy(query_states D2H)", err);
+            set_error("cudaMemcpy(traceback metadata D2H)", err);
             status = Status::CudaError;
             goto cleanup;
         }
+        QueryState *host_states = static_cast<QueryState *>(out_query_states);
+        for (int32_t i = 0; i < batch.num_seqs; ++i) {
+            const TracebackMeta &meta = metadata[static_cast<size_t>(i)];
+            QueryState &host = host_states[i];
+            host.bs_m_wf_size = meta.m_size;
+            host.bs_m_jumps_wf_size = meta.m_jumps_size;
+            host.bs_i_jumps_wf_size = meta.i_jumps_size;
+            host.sc_peak_wf = meta.peak_wf;
+            host.capacity_exceeded = meta.capacity_exceeded != 0;
+            host.cap_reason = meta.cap_reason;
+            host.cap_required = meta.cap_required;
+            host.cap_available = meta.cap_available;
+        }
+#define COPY_TRACEBACK_2D(field, label)                                      \
+        do {                                                                 \
+            err = cudaMemcpy2D(host_states[0].field, sizeof(QueryState),      \
+                               d_states[0].field, sizeof(QueryState),         \
+                               sizeof(host_states[0].field),                  \
+                               static_cast<size_t>(batch.num_seqs),           \
+                               cudaMemcpyDeviceToHost);                       \
+            if (err != cudaSuccess) {                                        \
+                set_error((label), err);                                     \
+                status = Status::CudaError;                                  \
+                goto cleanup;                                                \
+            }                                                                \
+        } while (false)
+        COPY_TRACEBACK_2D(bs_m_wf, "cudaMemcpy2D(traceback M D2H)");
+        COPY_TRACEBACK_2D(bs_m_jumps_wf, "cudaMemcpy2D(traceback M jumps D2H)");
+        COPY_TRACEBACK_2D(bs_i_jumps_wf, "cudaMemcpy2D(traceback I jumps D2H)");
+#undef COPY_TRACEBACK_2D
     }
     if (ev_d2h != nullptr) {
         cudaEventRecord(ev_d2h);
