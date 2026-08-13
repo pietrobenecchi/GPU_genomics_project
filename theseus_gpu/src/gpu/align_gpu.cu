@@ -16,6 +16,7 @@
 
 #include <cuda_runtime.h>
 
+#include <cstddef>
 #include <cstdio>
 #include <vector>
 
@@ -1069,8 +1070,42 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     // the same -1, one right after the other, so the two loops collapse into
     // this one pass with no change to the state either produced.
     const int32_t vd_fill = vd_map_fill_count(graph.num_vertices);
-    for (int32_t i = tx; i < shared_span; i += ntx) {
-        qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+    // Cleared a word at a time rather than a Cell at a time. Writing whole Cells
+    // is what this loop used to do and it is the kernel's single largest memory
+    // consumer: shared_span cells per query, 52 107 of them on c4, 26.7 M cell
+    // stores over a 512-query batch. nvcc lowers a Cell store into one store per
+    // field, and at a 24-byte stride each of those warp-wide stores reaches
+    // across the whole 768-byte span the warp's cells occupy, so every 32-byte
+    // sector in that span is paid for once per field instead of once. Nsight on
+    // c4_err measured the result: 61.2 M store sectors from 2.74 M requests,
+    // 22.3 sectors per request, with LG throttle the top warp stall at 46.3 of
+    // 107.9 cycles per issued instruction.
+    //
+    // Storing 32-bit words instead gives each warp 128 contiguous bytes and four
+    // sectors, none of them touched twice. The bytes written are the same: this
+    // is the image of Cell{-1, -1, -1, -1, Matrix::None}, five words of ones
+    // (prev_pos low, prev_pos high, vertex_id, offset, diag) and a last word
+    // that is from_matrix (None == 0) plus the three padding bytes after it. The
+    // padding was previously left at whatever the struct store put there and is
+    // read by nothing; defining it costs the same store.
+    //
+    // The static_asserts are the guard: they pin the layout the word image is
+    // derived from, so a change to Cell breaks the build here instead of
+    // silently clearing the ScratchPad to the wrong pattern.
+    static_assert(sizeof(Cell) == 24, "ScratchPad clear assumes a 24-byte Cell");
+    static_assert(sizeof(Cell) % sizeof(uint32_t) == 0, "Cell must be a whole number of words");
+    static_assert(sizeof(Cell::pos_t) == 8, "prev_pos is assumed to span two words");
+    static_assert(offsetof(Cell, prev_pos) == 0, "word 0-1 is prev_pos");
+    static_assert(offsetof(Cell, vertex_id) == 8, "word 2 is vertex_id");
+    static_assert(offsetof(Cell, offset) == 12, "word 3 is offset");
+    static_assert(offsetof(Cell, diag) == 16, "word 4 is diag");
+    static_assert(offsetof(Cell, from_matrix) == 20, "word 5 is from_matrix plus padding");
+    static_assert(static_cast<int>(Cell::Matrix::None) == 0, "the last word is zero");
+    constexpr int32_t kCellWords = static_cast<int32_t>(sizeof(Cell) / sizeof(uint32_t));
+    uint32_t *sp_words = reinterpret_cast<uint32_t *>(qs.sp_wf);
+    const int32_t sp_nwords = shared_span * kCellWords;
+    for (int32_t i = tx; i < sp_nwords; i += ntx) {
+        sp_words[i] = (i % kCellWords == kCellWords - 1) ? 0u : 0xFFFFFFFFu;
     }
     for (int32_t i = tx; i < vd_fill; i += ntx) {
         qs.vd_vertex_to_idx[i] = -1;
