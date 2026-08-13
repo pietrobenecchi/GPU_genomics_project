@@ -657,6 +657,57 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
  *
  * Every thread of the block must call it: it contains barriers.
  */
+/**
+ * @brief Fill base[begin, end) with @p value, four words per thread per step.
+ *
+ * Thread coarsening on the one phase that is still the kernel's largest: after
+ * the hot/cold split the clear is 57-69 % of the cycles of a simple-tier query
+ * (`c4_exact` 62,7 M against 27,6 M for the whole score loop) because it is one
+ * word for each of the 52 224 diagonals of the window. The words are contiguous
+ * and all get the same value, so the loop is free to hand each thread four of
+ * them at once and write them as a single 128-bit store: four times fewer store
+ * instructions and four times fewer trips round the loop, on a kernel whose
+ * duration tracks instructions issued rather than bytes moved.
+ *
+ * The alignment is checked rather than assumed. sp_off sits at a 16-byte
+ * boundary inside QueryState, but sizeof(QueryState) is 8 modulo 16, so every
+ * other state in the array starts 8 bytes off and an int4 store there would
+ * fault. `begin` moves with the query window too. So the vector range is
+ * derived from the address at run time and the ragged ends are filled one word
+ * at a time -- at most three words at each end, against 52 224 in the middle.
+ *
+ * The three loops need no barrier between them: they cover disjoint ranges, and
+ * every thread writes the same value to a word no other thread writes.
+ */
+__device__ inline void fill_words(int32_t *base, int32_t begin, int32_t end,
+                                  int32_t value, int32_t tx, int32_t ntx) {
+    if (begin >= end) {
+        return;
+    }
+    // Words to skip before the first 16-byte boundary. The array is int32, so
+    // the byte misalignment is always a multiple of 4 and this is exact.
+    const uintptr_t addr = reinterpret_cast<uintptr_t>(base + begin);
+    const int32_t skip = static_cast<int32_t>((16u - (addr & 15u)) & 15u) >> 2;
+    int32_t vec_begin = begin + skip;
+    if (vec_begin > end) {
+        vec_begin = end;
+    }
+    const int32_t nvec = (end - vec_begin) >> 2;
+    const int32_t vec_end = vec_begin + (nvec << 2);
+
+    for (int32_t i = begin + tx; i < vec_begin; i += ntx) {
+        base[i] = value;
+    }
+    const int4 quad = make_int4(value, value, value, value);
+    int4 *vbase = reinterpret_cast<int4 *>(base + vec_begin);
+    for (int32_t i = tx; i < nvec; i += ntx) {
+        vbase[i] = quad;
+    }
+    for (int32_t i = vec_end + tx; i < end; i += ntx) {
+        base[i] = value;
+    }
+}
+
 __device__ void sp_reset_block(QueryState &qs) {
     const int32_t tx = static_cast<int32_t>(threadIdx.x);
     const int32_t ntx = static_cast<int32_t>(blockDim.x);
@@ -1212,12 +1263,8 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     // has cleared: see sp_clear_start. On a batch where every state is used
     // once this is the whole window, exactly as before; where a state is reused
     // the second query onwards clears nothing at all.
-    for (int32_t i = shared_clear_start + tx; i < shared_span; i += ntx) {
-        qs.sp_off[i] = -1;
-    }
-    for (int32_t i = tx; i < vd_fill; i += ntx) {
-        qs.vd_vertex_to_idx[i] = -1;
-    }
+    fill_words(qs.sp_off, shared_clear_start, shared_span, -1, tx, ntx);
+    fill_words(qs.vd_vertex_to_idx, 0, vd_fill, -1, tx, ntx);
     __syncthreads();
 
     if (tx == 0) {
