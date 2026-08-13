@@ -258,12 +258,12 @@ __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
  * @brief Block-parallel replacement for the serial merge of one tile of staged
  * candidates into the ScratchPad.
  *
- * The serial loop is
+ * The serial loop is sp_merge_candidate over the tile in index order,
  *
- *     Cell &cell = sp_access_alloc(qs, c.diag);
- *     if (cell.offset < c.offset) cell = c;
+ *     if (sp_off[idx] == -1) append(c.diag);
+ *     if (sp_off[idx] < c.offset) { sp_wf[idx] = c; sp_off[idx] = c.offset; }
  *
- * over the tile in index order, and it has two observable effects, not one.
+ * and it has two observable effects, not one.
  *
  * **The winner.** The comparison is strict, so a later candidate with an equal
  * offset never replaces an earlier one: the surviving cell is the candidate with
@@ -307,7 +307,7 @@ __device__ void merge_candidate_tile(QueryState &qs,
     const int32_t my_diag = mine ? shared_cells[tx].diag : 0;
     const int32_t my_off = mine ? shared_cells[tx].offset : 0;
 
-    // Same guard as sp_access_alloc: out of window is a capacity failure, and
+    // Same guard as sp_merge_candidate: out of window is a capacity failure, and
     // the candidate neither appends nor writes.
     const int32_t idx = my_diag - qs.sp_min_diag;
     const bool in_range = mine && idx >= 0 && idx < kScratchpadSpan;
@@ -340,8 +340,8 @@ __device__ void merge_candidate_tile(QueryState &qs,
 
     // Read the resting state before any of this tile's writes: a diagonal is
     // appended only if the cell was still inactive, exactly as access_alloc
-    // decides it.
-    const bool needs_append = is_first && qs.sp_wf[idx].offset == -1;
+    // decides it. The activity flag is sp_off, not the cell's own offset field.
+    const bool needs_append = is_first && qs.sp_off[idx] == -1;
     __syncthreads();
 
     if (tx == 0) {
@@ -363,9 +363,11 @@ __device__ void merge_candidate_tile(QueryState &qs,
     }
     __syncthreads();
 
-    // One winner per diagonal, so no two threads write the same cell.
-    if (is_winner && qs.sp_wf[idx].offset < my_off) {
+    // One winner per diagonal, so no two threads write the same cell, and the
+    // payload and its offset are written by the same thread.
+    if (is_winner && qs.sp_off[idx] < my_off) {
         qs.sp_wf[idx] = shared_cells[tx];
+        qs.sp_off[idx] = my_off;
     }
     __syncthreads();
 }
@@ -1070,42 +1072,31 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     // the same -1, one right after the other, so the two loops collapse into
     // this one pass with no change to the state either produced.
     const int32_t vd_fill = vd_map_fill_count(graph.num_vertices);
-    // Cleared a word at a time rather than a Cell at a time. Writing whole Cells
-    // is what this loop used to do and it is the kernel's single largest memory
-    // consumer: shared_span cells per query, 52 107 of them on c4, 26.7 M cell
-    // stores over a 512-query batch. nvcc lowers a Cell store into one store per
-    // field, and at a 24-byte stride each of those warp-wide stores reaches
-    // across the whole 768-byte span the warp's cells occupy, so every 32-byte
-    // sector in that span is paid for once per field instead of once. Nsight on
-    // c4_err measured the result: 61.2 M store sectors from 2.74 M requests,
-    // 22.3 sectors per request, with LG throttle the top warp stall at 46.3 of
-    // 107.9 cycles per issued instruction.
+    // One word per diagonal: the offsets alone. This loop is the kernel's
+    // single largest memory consumer -- shared_span entries per query, 52 107
+    // of them on c4, and Nsight put it at 44 % of the cycles of a c4_err block
+    // and 71 % of a c4_exact one -- so what it does *not* write is the point.
     //
-    // Storing 32-bit words instead gives each warp 128 contiguous bytes and four
-    // sectors, none of them touched twice. The bytes written are the same: this
-    // is the image of Cell{-1, -1, -1, -1, Matrix::None}, five words of ones
-    // (prev_pos low, prev_pos high, vertex_id, offset, diag) and a last word
-    // that is from_matrix (None == 0) plus the three padding bytes after it. The
-    // padding was previously left at whatever the struct store put there and is
-    // read by nothing; defining it costs the same store.
+    // It used to write whole Cells, six words each, four of which are the -1
+    // sentinel of fields nothing reads while the cell is inactive. Two rounds
+    // of this: the first (commit 00ea1ef) kept the six words but stored them as
+    // words rather than as a struct, because at a 24-byte stride each warp-wide
+    // field store reached across the whole 768-byte span the warp's cells
+    // occupy and paid for every 32-byte sector once per field -- 61.2 M store
+    // sectors from 2.74 M requests, 22.3 per request. Storing words dropped
+    // that to 25.1 M and 4.8, halved DRAM traffic, and left the kernel's
+    // duration untouched: it is not bandwidth-bound.
     //
-    // The static_asserts are the guard: they pin the layout the word image is
-    // derived from, so a change to Cell breaks the build here instead of
-    // silently clearing the ScratchPad to the wrong pattern.
-    static_assert(sizeof(Cell) == 24, "ScratchPad clear assumes a 24-byte Cell");
-    static_assert(sizeof(Cell) % sizeof(uint32_t) == 0, "Cell must be a whole number of words");
-    static_assert(sizeof(Cell::pos_t) == 8, "prev_pos is assumed to span two words");
-    static_assert(offsetof(Cell, prev_pos) == 0, "word 0-1 is prev_pos");
-    static_assert(offsetof(Cell, vertex_id) == 8, "word 2 is vertex_id");
-    static_assert(offsetof(Cell, offset) == 12, "word 3 is offset");
-    static_assert(offsetof(Cell, diag) == 16, "word 4 is diag");
-    static_assert(offsetof(Cell, from_matrix) == 20, "word 5 is from_matrix plus padding");
-    static_assert(static_cast<int>(Cell::Matrix::None) == 0, "the last word is zero");
-    constexpr int32_t kCellWords = static_cast<int32_t>(sizeof(Cell) / sizeof(uint32_t));
-    uint32_t *sp_words = reinterpret_cast<uint32_t *>(qs.sp_wf);
-    const int32_t sp_nwords = shared_span * kCellWords;
-    for (int32_t i = tx; i < sp_nwords; i += ntx) {
-        sp_words[i] = (i % kCellWords == kCellWords - 1) ? 0u : 0xFFFFFFFFu;
+    // This round drops five of the six words instead of making them cheaper.
+    // The offset moved into sp_off, its own dense array, and it is the only
+    // thing the clear has to establish, because it is the only thing read of an
+    // inactive cell -- which sp_reset has always relied on, clearing the offset
+    // alone between scores. sp_wf is left exactly as the previous query left
+    // it; nothing reads a cell before making it active, and making it active
+    // writes it whole. Stores per query go from 6 x span to 1 x span, and the
+    // warp writes 128 contiguous bytes over four sectors, none touched twice.
+    for (int32_t i = tx; i < shared_span; i += ntx) {
+        qs.sp_off[i] = -1;
     }
     for (int32_t i = tx; i < vd_fill; i += ntx) {
         qs.vd_vertex_to_idx[i] = -1;

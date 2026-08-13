@@ -166,7 +166,23 @@ struct QueryState {
     // densify step iterates). sp_wf[diag - sp_min_diag] is the cell of `diag`.
     // A cell is "inactive" when its offset is -1, which is both the resting
     // value and how access_alloc detects a first touch.
+    //
+    // The offset is split out of the cell into sp_off, its own dense array, and
+    // sp_off is the *authority*: every activity test and every offset
+    // comparison reads it, and only it is cleared when the window opens. That
+    // makes the per-query clear one word per diagonal instead of the six a Cell
+    // occupies, which matters because the clear runs over the whole window
+    // (52 107 diagonals on c4) while the alignment touches a handful of them.
+    //
+    // sp_wf is the cold half: the payload of the cells that are actually
+    // active, never cleared, read only through sp_diags. Its own `offset` field
+    // is written along with the rest of the cell and read back as part of the
+    // payload, so an active cell agrees with sp_off; an inactive one holds
+    // whatever the last active cell on that diagonal left, exactly as it
+    // already did between scores, since sp_reset has always cleared the offset
+    // alone. See profiling/campagna_cuda/01_invariante_scratchpad.md.
     Cell    sp_wf[kScratchpadSpan];
+    int32_t sp_off[kScratchpadSpan];
     Cell    sp_overflow_cell;
     int32_t sp_diags[kScratchpadSpan];
     int32_t sp_min_diag;
@@ -389,8 +405,10 @@ THESEUS_HD inline int sp_init_window(QueryState &qs, int min_diag, int max_diag)
 
 THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
     const int span = sp_init_window(qs, min_diag, max_diag);
+    // Only the offsets. sp_wf is payload and nothing reads it before a cell has
+    // been made active, which writes it whole.
     for (int i = 0; i < span; ++i) {
-        qs.sp_wf[i] = Cell{-1, -1, -1, -1, Cell::Matrix::None};
+        qs.sp_off[i] = -1;
     }
 }
 
@@ -408,28 +426,44 @@ THESEUS_HD inline Cell &sp_at(QueryState &qs, int diag) {
 }
 
 /**
- * @brief The scratchpad cell of @p diag, adding it to the active list on first
- * touch. Mirrors ScratchPad::access_alloc: the diagonal is appended to the list
- * only when it was still inactive (offset -1), which dedups by first touch and
- * preserves first-touch order.
+ * @brief Merge one candidate into the scratchpad, keeping the larger offset.
+ *
+ * This is ScratchPad::access_alloc followed by the compare-and-store that every
+ * caller performed on the reference it returned:
+ *
+ *     Cell &cell = sp_access_alloc(qs, c.diag);
+ *     if (cell.offset < c.offset) cell = c;
+ *
+ * The two halves are one primitive now because the offset lives in sp_off and
+ * the payload in sp_wf, so a caller holding a `Cell &` could no longer keep the
+ * two in step on its own. The semantics are unchanged, field for field:
+ *
+ * - the diagonal is appended to sp_diags only when the cell was still inactive,
+ *   which dedups by first touch and preserves first-touch order (densify walks
+ *   sp_diags in that order, so the order decides the dense wavefront);
+ * - the comparison stays strict, so an equal offset never displaces the cell
+ *   already there;
+ * - out of window is a capacity failure and the candidate neither appends nor
+ *   writes, as before.
  */
-THESEUS_HD inline Cell &sp_access_alloc(QueryState &qs, int diag) {
-    const int idx = diag - qs.sp_min_diag;
+THESEUS_HD inline void sp_merge_candidate(QueryState &qs, const Cell &c) {
+    const int idx = c.diag - qs.sp_min_diag;
     if (idx < 0 || idx >= kScratchpadSpan) {
         cap_fail(qs, kCapScratchpadSpan, idx < 0 ? -idx : idx + 1, kScratchpadSpan);
-        qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
-        return qs.sp_overflow_cell;
+        return;
     }
-    if (qs.sp_wf[idx].offset == -1) {
+    if (qs.sp_off[idx] == -1) {
         if (qs.sp_ndiags >= kScratchpadSpan) {
             cap_fail(qs, kCapScratchpadDiags, qs.sp_ndiags + 1, kScratchpadSpan);
-            qs.sp_overflow_cell = Cell{-1, -1, -1, -1, Cell::Matrix::None};
-            return qs.sp_overflow_cell;
+            return;
         }
-        qs.sp_diags[qs.sp_ndiags] = diag;
+        qs.sp_diags[qs.sp_ndiags] = c.diag;
         ++qs.sp_ndiags;
     }
-    return qs.sp_wf[idx];
+    if (qs.sp_off[idx] < c.offset) {
+        qs.sp_wf[idx] = c;
+        qs.sp_off[idx] = c.offset;
+    }
 }
 
 /**
@@ -437,7 +471,7 @@ THESEUS_HD inline Cell &sp_access_alloc(QueryState &qs, int diag) {
  * empty the active list. Only touched cells are cleared, matching the CPU code.
  */
 THESEUS_HD inline void sp_reset_one(QueryState &qs, int i) {
-    qs.sp_wf[qs.sp_diags[i] - qs.sp_min_diag].offset = -1;
+    qs.sp_off[qs.sp_diags[i] - qs.sp_min_diag] = -1;
 }
 
 THESEUS_HD inline void sp_reset(QueryState &qs) {

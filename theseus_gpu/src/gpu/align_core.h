@@ -55,10 +55,7 @@ THESEUS_HD inline void core_sparsify_m(QueryState &qs, Cell *dense_wf,
         new_cell.prev_pos = cells_range.start + l;
         const int32_t new_col = new_cell.offset + new_cell.diag;
         if (new_cell.offset <= query_len && new_col <= upper_bound) {
-            Cell &cell = sp_access_alloc(qs, new_cell.diag);
-            if (cell.offset < new_cell.offset) {
-                cell = new_cell;
-            }
+            sp_merge_candidate(qs, new_cell);
         }
     }
 }
@@ -80,10 +77,7 @@ THESEUS_HD inline void core_sparsify_jumps(QueryState &qs, Cell *dense_wf,
         new_cell.offset += offset_increase;
         const int32_t new_col = new_cell.offset + new_cell.diag;
         if (new_cell.offset <= query_len && new_col <= upper_bound) {
-            Cell &cell = sp_access_alloc(qs, new_cell.diag);
-            if (cell.offset < new_cell.offset) {
-                cell = new_cell;
-            }
+            sp_merge_candidate(qs, new_cell);
         }
     }
 }
@@ -101,10 +95,7 @@ THESEUS_HD inline void core_sparsify_indel(QueryState &qs, Cell *dense_wf,
         new_cell.offset += offset_increase;
         const int32_t new_col = new_cell.offset + new_cell.diag;
         if (new_cell.offset <= query_len && new_col <= upper_bound) {
-            Cell &cell = sp_access_alloc(qs, new_cell.diag);
-            if (cell.offset < new_cell.offset) {
-                cell = new_cell;
-            }
+            sp_merge_candidate(qs, new_cell);
         }
     }
 }

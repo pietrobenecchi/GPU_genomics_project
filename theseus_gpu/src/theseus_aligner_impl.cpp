@@ -271,12 +271,9 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // Branchless push_back
-        auto &cell = sp_access_alloc(*_qs, new_cell.diag);
-
-        // If better offset
-        const bool cmp = cell.offset < new_cell.offset;
-        cell = (cmp) ? new_cell : cell;
+        // access_alloc + "keep the better offset", now one primitive because
+        // the offset and the payload live in two arrays.
+        sp_merge_candidate(*_qs, new_cell);
       }
     }
   }
@@ -308,12 +305,9 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // Branchless push_back
-        auto &cell = sp_access_alloc(*_qs, new_cell.diag);
-
-        // If better offset
-        const bool cmp = cell.offset < new_cell.offset;
-        cell = (cmp) ? new_cell : cell;
+        // access_alloc + "keep the better offset", now one primitive because
+        // the offset and the payload live in two arrays.
+        sp_merge_candidate(*_qs, new_cell);
       }
     }
   }
@@ -342,12 +336,9 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // Branchless push_back
-        auto &cell = sp_access_alloc(*_qs, new_cell.diag);
-
-        // If better offset
-        const bool cmp = cell.offset < new_cell.offset;
-        cell = (cmp) ? new_cell : cell;
+        // access_alloc + "keep the better offset", now one primitive because
+        // the offset and the payload live in two arrays.
+        sp_merge_candidate(*_qs, new_cell);
       }
     }
   }
