@@ -25,6 +25,7 @@ struct CmdArgs {
   int gpu_threads = 128;
   bool require_gpu_result = false;
   bool verify_gpu_with_cpu = false;
+  int repeat = 1;
 };
 
 // Sequences to align, together with where each one starts in the graph.
@@ -52,7 +53,15 @@ void help() {
       << "                               nothing still writes the CPU's alignments,\n"
       << "                               which compare equal to a CPU golden.\n"
       << "      --verify-gpu-with-cpu    Explicit validation mode: also run the CPU\n"
-      << "                               aligner and compare endpoint metadata.\n";
+      << "                               aligner and compare endpoint metadata.\n"
+      << "      --repeat <int>           Align the same batch this many times through\n"
+      << "                               one aligner (default 1). Measurement only: it\n"
+      << "                               separates what a batch costs from what the\n"
+      << "                               process costs, since the CUDA context, the\n"
+      << "                               graph upload and the page-locked host buffers\n"
+      << "                               are paid once and reused. The GAF written is\n"
+      << "                               the last iteration's, and every iteration\n"
+      << "                               produces the same alignments.\n";
 }
 
 CmdArgs parse_args(int argc, char *const *argv) {
@@ -68,6 +77,7 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"gpu-threads", required_argument, nullptr, 1001},
       {"require-gpu-result", no_argument, nullptr, 1002},
       {"verify-gpu-with-cpu", no_argument, nullptr, 1003},
+      {"repeat", required_argument, nullptr, 1004},
       {nullptr, 0, nullptr, 0}};
 
   CmdArgs args;
@@ -114,6 +124,13 @@ CmdArgs parse_args(int argc, char *const *argv) {
         break;
       case 1003:
         args.verify_gpu_with_cpu = true;
+        break;
+      case 1004:
+        args.repeat = std::stoi(optarg);
+        if (args.repeat < 1) {
+          std::cerr << "Invalid --repeat: " << args.repeat << " (expected >= 1)\n";
+          std::exit(1);
+        }
         break;
       case 1001:
         args.gpu_threads = std::stoi(optarg);
@@ -210,11 +227,35 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
 bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
              std::ostream &out_stream, int gpu_threads,
              bool require_gpu_result, bool verify_gpu_with_cpu,
-             double &serialization_ms) {
+             double &serialization_ms, int repeat) {
   theseus::GpuBatchReport report;
-  std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
-      inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
-      gpu_threads, verify_gpu_with_cpu);
+  std::vector<theseus::Alignment> alignments;
+  // Every iteration aligns the same batch through the same aligner, so the
+  // first one carries the per-process costs (CUDA context, graph upload, page
+  // locking the host buffers) and the later ones do not. Each prints its own
+  // timing line; the alignments kept are the last iteration's, and they are the
+  // same alignments every time.
+  for (int iteration = 0; iteration < repeat; ++iteration) {
+    if (repeat > 1) {
+      std::cerr << "GPU iteration " << iteration << "\n";
+    }
+    alignments = aligner.align_batch_gpu(
+        inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
+        gpu_threads, verify_gpu_with_cpu);
+    if (repeat > 1) {
+      std::cerr << "GPU timing: h2d " << report.h2d_ms << " ms; kernel "
+                << report.kernel_ms << " ms; d2h " << report.d2h_ms
+                << " ms; total " << report.end_to_end_ms << " ms\n"
+                << "GPU host stages: prepare " << report.batch_prepare_ms
+                << " ms; graph " << report.graph_prepare_ms
+                << " ms; host_buffers " << report.host_buffers_ms
+                << " ms; cpu_verification " << report.cpu_verification_ms
+                << " ms; traceback " << report.host_traceback_ms
+                << " ms; alignment_construction "
+                << report.alignment_construction_ms << " ms; align_batch "
+                << report.align_batch_host_ms << " ms\n";
+    }
+  }
 
   const auto serialization_start = std::chrono::steady_clock::now();
   for (size_t i = 0; i < alignments.size(); ++i) {
@@ -304,7 +345,7 @@ int main(int argc, char *const *argv) {
   if (args.backend == Backend::Gpu) {
     gpu_ok = run_gpu(aligner, inputs, output_file, args.gpu_threads,
                      args.require_gpu_result, args.verify_gpu_with_cpu,
-                     serialization_ms);
+                     serialization_ms, args.repeat);
   } else {
     run_cpu(aligner, inputs, output_file);
   }
