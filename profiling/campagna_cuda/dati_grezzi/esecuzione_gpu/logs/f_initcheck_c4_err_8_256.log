@@ -1,0 +1,71 @@
+========= COMPUTE-SANITIZER
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51a00 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51a20 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51a40 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51a60 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51a80 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51aa0 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51ac0 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+========= Host API memory access error at host access to 0x7c6c64c51a00 of size 256 bytes
+=========     Uninitialized access at 0x7c6c64c51ae0 on access by cudaMemcpy source
+=========     Saved host backtrace up to driver entry point at error
+=========         Host Frame: theseus::gpu::align_batch(theseus::gpu::BatchView const&, theseus::gpu::DeviceGraph const*, theseus::gpu::DeviceWorkspace*, int const*, int const*, theseus::gpu::AlignScoring, theseus::gpu::AlignOptions, theseus::gpu::AlignResult*, void*, int*) [0x258c5] in seq2graph_proxy
+=========         Host Frame: theseus::TheseusAligner::align_batch_gpu(std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > const&, std::vector<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::allocator<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > >&, std::vector<int, std::allocator<int> >&, theseus::GpuBatchReport*, int, bool) [0x175c9] in seq2graph_proxy
+=========         Host Frame: run_gpu(theseus::TheseusAligner&, Inputs&, std::ostream&, int, bool, bool, double&, int) [0xdd3c] in seq2graph_proxy
+=========         Host Frame: main [0xd4ba] in seq2graph_proxy
+========= 
+GPU backend: threads/block 256; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.066848 kernel=10.647616 d2h=12.563008 total=23.277472
+GPU timing: h2d 0.066848 ms; kernel 10.6476 ms; d2h 12.563 ms; total 23.2775 ms
+GPU host stages: prepare 0.002267 ms; graph 232.289 ms; host_buffers 0.93766 ms; cpu_verification 0 ms; traceback 0.005177 ms; alignment_construction 0.00203 ms; align_batch 259.459 ms
+Aligned 8 sequences in 259537 microseconds on gpu
+Application timing: graph_parse 4.43434 ms; input_parse 0.017254 ms; gaf_serialization 0.026087 ms; output_flush 0.015674 ms; total 264.084 ms
+========= ERROR SUMMARY: 8 errors

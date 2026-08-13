@@ -1,0 +1,19 @@
+GPU iteration 0
+GPU timing: h2d 0.155616 ms; kernel 2.93891 ms; d2h 46.6798 ms; total 49.7744 ms
+GPU host stages: prepare 0.41479 ms; graph 234.063 ms; host_buffers 332.846 ms; cpu_verification 0 ms; traceback 1.27015 ms; alignment_construction 0.472312 ms; align_batch 660.241 ms
+GPU iteration 1
+GPU timing: h2d 0.109344 ms; kernel 2.26829 ms; d2h 46.5708 ms; total 48.9485 ms
+GPU host stages: prepare 0.363011 ms; graph 0.00019 ms; host_buffers 0.00117 ms; cpu_verification 0 ms; traceback 1.15028 ms; alignment_construction 0.3701 ms; align_batch 50.9121 ms
+GPU iteration 2
+GPU timing: h2d 0.10032 ms; kernel 2.24461 ms; d2h 46.561 ms; total 48.9059 ms
+GPU host stages: prepare 0.122876 ms; graph 0.000124 ms; host_buffers 0.001017 ms; cpu_verification 0 ms; traceback 1.18128 ms; alignment_construction 0.311964 ms; align_batch 50.597 ms
+GPU iteration 3
+GPU timing: h2d 0.113984 ms; kernel 2.23232 ms; d2h 46.565 ms; total 48.9113 ms
+GPU host stages: prepare 0.114828 ms; graph 4.3e-05 ms; host_buffers 0.000969 ms; cpu_verification 0 ms; traceback 1.1718 ms; alignment_construction 0.303895 ms; align_batch 50.5747 ms
+GPU iteration 4
+GPU timing: h2d 0.110784 ms; kernel 2.23693 ms; d2h 46.5572 ms; total 48.9049 ms
+GPU host stages: prepare 0.111043 ms; graph 6.8e-05 ms; host_buffers 0.000968 ms; cpu_verification 0 ms; traceback 1.21138 ms; alignment_construction 0.296762 ms; align_batch 50.6 ms
+GPU backend: threads/block 128; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.110784 kernel=2.236928 d2h=46.557217 total=48.904926
+GPU timing: h2d 0.110784 ms; kernel 2.23693 ms; d2h 46.5572 ms; total 48.9049 ms
+GPU host stages: prepare 0.111043 ms; graph 6.8e-05 ms; host_buffers 0.000968 ms; cpu_verification 0 ms; traceback 1.21138 ms; alignment_construction 0.296762 ms; align_batch 50.6 ms
+Application timing: graph_parse 3.29382 ms; input_parse 1.63982 ms; gaf_serialization 2.29039 ms; output_flush 0.006975 ms; total 871.269 ms

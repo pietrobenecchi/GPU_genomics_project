@@ -1,0 +1,19 @@
+GPU iteration 0
+GPU timing: h2d 0.11232 ms; kernel 3.55565 ms; d2h 0.191392 ms; total 3.85936 ms
+GPU host stages: prepare 0.250652 ms; graph 174.839 ms; host_buffers 0.940296 ms; cpu_verification 0 ms; traceback 0.52971 ms; alignment_construction 0.360557 ms; align_batch 221.933 ms
+GPU iteration 1
+GPU timing: h2d 0.098752 ms; kernel 0.395232 ms; d2h 0.108352 ms; total 0.602336 ms
+GPU host stages: prepare 0.187244 ms; graph 5.5e-05 ms; host_buffers 0.001398 ms; cpu_verification 0 ms; traceback 0.551702 ms; alignment_construction 0.321993 ms; align_batch 1.70052 ms
+GPU iteration 2
+GPU timing: h2d 0.096256 ms; kernel 0.395392 ms; d2h 0.10544 ms; total 0.597088 ms
+GPU host stages: prepare 0.087459 ms; graph 4.3e-05 ms; host_buffers 0.001321 ms; cpu_verification 0 ms; traceback 0.562041 ms; alignment_construction 0.241515 ms; align_batch 1.5206 ms
+GPU iteration 3
+GPU timing: h2d 0.097056 ms; kernel 0.390784 ms; d2h 0.10976 ms; total 0.5976 ms
+GPU host stages: prepare 0.080124 ms; graph 4.7e-05 ms; host_buffers 0.00129 ms; cpu_verification 0 ms; traceback 0.540763 ms; alignment_construction 0.23155 ms; align_batch 1.48069 ms
+GPU iteration 4
+GPU timing: h2d 0.096032 ms; kernel 0.38864 ms; d2h 0.114432 ms; total 0.599104 ms
+GPU host stages: prepare 0.102802 ms; graph 7.2e-05 ms; host_buffers 0.001044 ms; cpu_verification 0 ms; traceback 0.572389 ms; alignment_construction 0.270872 ms; align_batch 1.57657 ms
+GPU backend: threads/block 128; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.096032 kernel=0.388640 d2h=0.114432 total=0.599104
+GPU timing: h2d 0.096032 ms; kernel 0.38864 ms; d2h 0.114432 ms; total 0.599104 ms
+GPU host stages: prepare 0.102802 ms; graph 7.2e-05 ms; host_buffers 0.001044 ms; cpu_verification 0 ms; traceback 0.572389 ms; alignment_construction 0.270872 ms; align_batch 1.57657 ms
+Application timing: graph_parse 4.9767 ms; input_parse 0.80756 ms; gaf_serialization 1.89867 ms; output_flush 0.007532 ms; total 236.835 ms

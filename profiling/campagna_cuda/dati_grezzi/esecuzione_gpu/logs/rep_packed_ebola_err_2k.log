@@ -1,0 +1,19 @@
+GPU iteration 0
+GPU timing: h2d 0.110592 ms; kernel 2.86106 ms; d2h 0.289888 ms; total 3.26154 ms
+GPU host stages: prepare 0.316533 ms; graph 170.284 ms; host_buffers 0.963446 ms; cpu_verification 0 ms; traceback 0.803675 ms; alignment_construction 0.359017 ms; align_batch 217.139 ms
+GPU iteration 1
+GPU timing: h2d 0.099264 ms; kernel 2.28323 ms; d2h 0.219616 ms; total 2.60211 ms
+GPU host stages: prepare 0.27267 ms; graph 8.7e-05 ms; host_buffers 0.000979 ms; cpu_verification 0 ms; traceback 0.781161 ms; alignment_construction 0.332275 ms; align_batch 4.02837 ms
+GPU iteration 2
+GPU timing: h2d 0.097184 ms; kernel 2.29424 ms; d2h 0.207968 ms; total 2.59939 ms
+GPU host stages: prepare 0.115018 ms; graph 6.6e-05 ms; host_buffers 0.001166 ms; cpu_verification 0 ms; traceback 0.783121 ms; alignment_construction 0.257908 ms; align_batch 3.79034 ms
+GPU iteration 3
+GPU timing: h2d 0.097504 ms; kernel 2.29555 ms; d2h 0.210336 ms; total 2.60339 ms
+GPU host stages: prepare 0.115601 ms; graph 4.5e-05 ms; host_buffers 0.000824 ms; cpu_verification 0 ms; traceback 0.786992 ms; alignment_construction 0.247876 ms; align_batch 3.78708 ms
+GPU iteration 4
+GPU timing: h2d 0.097952 ms; kernel 2.29238 ms; d2h 0.212096 ms; total 2.60243 ms
+GPU host stages: prepare 0.106397 ms; graph 4.2e-05 ms; host_buffers 0.000956 ms; cpu_verification 0 ms; traceback 0.766314 ms; alignment_construction 0.232817 ms; align_batch 3.74376 ms
+GPU backend: threads/block 128; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.097952 kernel=2.292384 d2h=0.212096 total=2.602432
+GPU timing: h2d 0.097952 ms; kernel 2.29238 ms; d2h 0.212096 ms; total 2.60243 ms
+GPU host stages: prepare 0.106397 ms; graph 4.2e-05 ms; host_buffers 0.000956 ms; cpu_verification 0 ms; traceback 0.766314 ms; alignment_construction 0.232817 ms; align_batch 3.74376 ms
+Application timing: graph_parse 2.71765 ms; input_parse 0.97591 ms; gaf_serialization 2.07627 ms; output_flush 0.006663 ms; total 239.231 ms

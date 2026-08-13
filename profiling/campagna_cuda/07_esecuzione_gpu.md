@@ -324,3 +324,69 @@ cronometro.**
 
 **Con questo tutte e sei le categorie hanno un esperimento**, e la 2 ne ha due:
 uno che si applica e uno che il dato ha respinto prima di scriverlo.
+
+---
+
+## 9. Fuori dalle sei categorie: la D2H del traceback (`e9435fe`)
+
+Chiuse le sei categorie, il kernel su `c4_err_2k` a regime è 2,3 ms e la D2H
+dello stesso batch è 46,8 ms: **il 95 % del tempo GPU per batch**. Prima di
+toccarla ho misurato quanto di quel trasferimento serve, strumentando il path
+CPU — stessa `QueryState`, stesse wavefront, output byte-identico:
+
+| dataset | celle M (media / max) | M jumps | I jumps | usato dei 3 × 4096 copiati |
+|---|---|---:|---:|---:|
+| `c4_err_2k` | 24,3 / 438 | 1,0 | 0,0 | **0,21 %** |
+| `ebola_err_2k` | 23,7 / 438 | 1,1 | 0,0 | **0,20 %** |
+| `c4_exact_2k` | 0,0 / 0 | 1,0 | 0,0 | **0,01 %** |
+
+La copia portava **288 KB per query** a taglia fissa — 576 MB per un batch da
+2048 — per consegnare in media **607 byte**. Il 99,8 % era slack mai scritto.
+
+**La modifica.** `CompactTracebackState` non contiene più i tre array da 4096
+celle ma tre puntatori. `align_batch` calcola la somma prefissa esclusiva delle
+tre dimensioni che ha appena letto dai metadati, `pack_traceback_kernel` (un
+blocco per query) raduna i prefissi usati in un buffer denso a quella base, e una
+sola D2H porta a casa esattamente quei byte; i puntatori indicano dentro il
+buffer di staging, che vive sul workspace ed è page-locked una volta per
+processo. Host e device derivano il layout dagli stessi numeri, quindi non serve
+nessuna scansione sul device. L'aritmetica è verificata a parte su 1501 batch
+simulati, comprese le wavefront vuote e il caso in cui l'intero batch è vuoto
+(`dati_grezzi/pack_traceback_test.cpp`).
+
+**Misurato**, 128 thread, `--repeat`, contro il commit padre:
+
+| | `c4_err_2k` | `c4_exact_2k` | `ebola_err_2k` |
+|---|---:|---:|---:|
+| D2H | 46,81 → **0,30 ms** (154×) | 46,67 → **0,19 ms** (244×) | 46,68 → **0,29 ms** (161×) |
+| tempo GPU per batch | 51,42 → **4,66 ms** (11,0×) | 50,61 → **3,86 ms** (13,1×) | 49,77 → **3,26 ms** (15,3×) |
+| `host_buffers` (per processo) | 235 → **1,0 ms** | 332 → **0,94 ms** | 333 → **0,96 ms** |
+
+Il secondo effetto non era previsto ma segue dallo stesso fatto: i 576 MiB
+page-locked erano quasi tutti `_host_states`, quindi il `cudaHostAlloc` da 250 ms
+di §6 si riduce a un millisecondo. Le due voci che §6 aveva isolato come «costo
+per processo» e «costo per batch» **si sono ridotte insieme**, perché erano la
+stessa struttura dati vista da due lati.
+
+**È la prima modifica della campagna che muove il wall clock.** Fin qui il
+ritornello era «il kernel è lo 0,6 % del wall»; qui il wall cade perché a cadere
+sono le due voci che lo componevano davvero:
+
+| dataset (128 thread) | wall prima | wall dopo | query/s |
+|---|---:|---:|---|
+| `c4_err_2k` | 905 ms | **389 ms** | 2263 → **5259** (2,32×) |
+| `ebola_err_2k` | 904 ms | **390 ms** | 2266 → **5253** (2,32×) |
+| `c4_exact_2k` | 734 ms | **389 ms** | 2789 → **5272** (1,89×) |
+| `c4_err` | 437 ms | **283 ms** | 1172 → **1809** (1,54×) |
+
+**Correttezza**: 30/30 su dieci dataset × 64/128/256, byte-identici ai golden;
+memcheck 0, racecheck 0 hazard, initcheck ai soliti 8 preesistenti.
+
+Due cose da sapere per chi tocca questo codice:
+
+- le celle sono **prestate, non copiate**: vivono nel buffer del workspace fino
+  alla `align_batch` successiva. Il backtrace gira subito dopo la chiamata, che è
+  l'unico uso mai esistito, ma ora è un vincolo di lifetime e non un dettaglio;
+- una wavefront di dimensione 0 lascia il suo puntatore all'inizio della fetta
+  della query, cioè subito dopo le celle della query precedente. Nessuno lo
+  legge, e non è mai nullo.
