@@ -1034,6 +1034,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int32_t *shared_warp_base,
                           int32_t &shared_accum,
                           int32_t &shared_span,
+                          int32_t &shared_clear_start,
                           Cell &block_end_cell) {
     const int32_t tx = static_cast<int32_t>(threadIdx.x);
     const int32_t ntx = static_cast<int32_t>(blockDim.x);
@@ -1062,6 +1063,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
         qs.cap_available = 0;
         // Scalar halves only; the block runs both clearing loops below.
         shared_span = sp_init_window(qs, -query_len, max_diag);
+        shared_clear_start = sp_clear_start(qs, shared_span);
         sc_init(qs, scoring.nscores);
         vd_init_scalar(qs, scoring.gapo, scoring.gape, scoring.nscores,
                        graph.num_vertices);
@@ -1103,7 +1105,11 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     // it; nothing reads a cell before making it active, and making it active
     // writes it whole. Stores per query go from 6 x span to 1 x span, and the
     // warp writes 128 contiguous bytes over four sectors, none touched twice.
-    for (int32_t i = tx; i < shared_span; i += ntx) {
+    // ... and, from here, only the entries no earlier query on this QueryState
+    // has cleared: see sp_clear_start. On a batch where every state is used
+    // once this is the whole window, exactly as before; where a state is reused
+    // the second query onwards clears nothing at all.
+    for (int32_t i = shared_clear_start + tx; i < shared_span; i += ntx) {
         qs.sp_off[i] = -1;
     }
     for (int32_t i = tx; i < vd_fill; i += ntx) {
@@ -1184,6 +1190,14 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     }
 
     if (tx == 0) {
+        // Past kScratchpadSpan diagonals the append to sp_diags is dropped
+        // while the winning cell is still written, so a cell can be left
+        // active with nothing to reset it. The result of this query is already
+        // discarded; this stops the dirt from reaching the next one on this
+        // state, by making it clear the whole of sp_off again.
+        if (qs.capacity_exceeded) {
+            qs.sp_cleared = 0;
+        }
         --block_score;
         result.score = block_score;
         result.end_vertex_id = block_end_cell.vertex_id;
@@ -1229,6 +1243,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
     __shared__ int32_t shared_warp_base[kMaxWarps];
     __shared__ int32_t shared_accum;
     __shared__ int32_t shared_span;
+    __shared__ int32_t shared_clear_start;
     __shared__ Cell block_end_cell;
 
     // One tile per staging buffer, sized at launch on ntx. Cell first
@@ -1263,6 +1278,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
               shared_i_ranges, shared_sparsify_plan, shared_i_candidates,
               shared_i_valid,
               shared_i_count, shared_warp_base, shared_accum, shared_span,
+              shared_clear_start,
               block_end_cell);
 }
 
@@ -1580,6 +1596,26 @@ Status align_batch(const BatchView &batch,
         ALLOC_GROWN(grown_start_offsets, per_query_i32_bytes, "cudaMalloc(start_offsets)");
         ALLOC_GROWN(grown_results, results_bytes, "cudaMalloc(results)");
         ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
+        // cudaMalloc does not zero, and sp_cleared has to read as 0 -- "no
+        // entry of sp_off has been cleared yet" -- on a state's first use, or
+        // the first query would skip a clear it still needs. One strided memset
+        // of one int per state, 8 KB for 2048 of them, done once per allocation
+        // rather than once per batch.
+        err = cudaMemset2D(&grown_states[0].sp_cleared, sizeof(QueryState), 0,
+                           sizeof(int32_t),
+                           static_cast<size_t>(batch.num_seqs));
+        if (err != cudaSuccess) {
+            set_error("cudaMemset2D(sp_cleared)", err);
+            cudaFree(grown_offsets);
+            cudaFree(grown_start_node_ids);
+            cudaFree(grown_start_offsets);
+            cudaFree(grown_results);
+            cudaFree(grown_states);
+            cudaFree(grown_lengths);
+            cudaFree(grown_traceback_meta);
+            status = Status::CudaError;
+            goto cleanup;
+        }
         ALLOC_GROWN(grown_lengths, lengths_bytes, "cudaMalloc(lengths)");
         ALLOC_GROWN(grown_traceback_meta,
                     sizeof(TracebackMeta) * static_cast<size_t>(batch.num_seqs),

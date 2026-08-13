@@ -185,6 +185,14 @@ struct QueryState {
     int32_t sp_off[kScratchpadSpan];
     Cell    sp_overflow_cell;
     int32_t sp_diags[kScratchpadSpan];
+    // How much of sp_off has ever been set to -1, in entries from 0. The
+    // ScratchPad returns to its resting state by itself -- every write is to a
+    // diagonal that is in sp_diags, and process_vertex ends with an sp_reset
+    // that walks sp_diags -- so a prefix cleared once stays clear for every
+    // later query on this state, and only the part never yet cleared has to be.
+    // 0 means "nothing cleared", which is what a fresh QueryState must read as.
+    // See profiling/campagna_cuda/04_clear_pigro.md.
+    int32_t sp_cleared;
     int32_t sp_min_diag;
     int32_t sp_max_diag;
     int32_t sp_ndiags;
@@ -403,11 +411,34 @@ THESEUS_HD inline int sp_init_window(QueryState &qs, int min_diag, int max_diag)
     return span;
 }
 
+/**
+ * @brief Entries of sp_off this query still has to clear, as [start, span).
+ *
+ * Only the offsets: sp_wf is payload and nothing reads it before a cell has
+ * been made active, which writes it whole. And only the entries never cleared
+ * before, because the ScratchPad puts itself back: every write goes to a
+ * diagonal that sp_access appended to sp_diags, and process_vertex ends with an
+ * sp_reset that walks sp_diags and sets each of them back to -1. So at the end
+ * of a query every entry it touched is -1 again, and the prefix cleared once is
+ * still clear. What is left is the entries a *longer* window reaches for the
+ * first time.
+ *
+ * The exception is a capacity failure: past kScratchpadSpan diagonals the
+ * append is dropped while the cell is still written, so a cell can stay dirty
+ * with nothing recording it. align_one answers that by putting sp_cleared back
+ * to 0, which makes the next query on this state clear everything again.
+ */
+THESEUS_HD inline int sp_clear_start(QueryState &qs, int span) {
+    const int start = qs.sp_cleared < span ? qs.sp_cleared : span;
+    if (span > qs.sp_cleared) {
+        qs.sp_cleared = span;
+    }
+    return start;
+}
+
 THESEUS_HD inline void sp_init(QueryState &qs, int min_diag, int max_diag) {
     const int span = sp_init_window(qs, min_diag, max_diag);
-    // Only the offsets. sp_wf is payload and nothing reads it before a cell has
-    // been made active, which writes it whole.
-    for (int i = 0; i < span; ++i) {
+    for (int i = sp_clear_start(qs, span); i < span; ++i) {
         qs.sp_off[i] = -1;
     }
 }
