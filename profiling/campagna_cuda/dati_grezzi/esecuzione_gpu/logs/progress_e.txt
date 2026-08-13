@@ -1,0 +1,40 @@
+[20:09:59] built base (7053193)
+[20:10:19] regr base: 30 pass; REGRESSION_EXIT 0
+[20:10:38] built clear (02127db)
+[20:10:57] regr clear: 30 pass; REGRESSION_EXIT 0
+[20:11:17] built empty (23dc718)
+[20:11:36] regr empty: 30 pass; REGRESSION_EXIT 0
+[20:11:36] memcheck clear ebola_exact_8 t64: ========= ERROR SUMMARY: 0 errors
+[20:11:37] memcheck clear c4_err_8 t256: ========= ERROR SUMMARY: 0 errors
+[20:11:37] initcheck clear ebola_exact_8 t64: ========= ERROR SUMMARY: 8 errors
+[20:11:38] initcheck clear c4_err_8 t256: ========= ERROR SUMMARY: 8 errors
+[20:11:38] racecheck clear ebola_exact_8 t64: ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+[20:11:39] racecheck clear c4_err_8 t256: ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+[20:11:39] memcheck empty ebola_exact_8 t64: ========= ERROR SUMMARY: 0 errors
+[20:11:40] memcheck empty c4_err_8 t256: ========= ERROR SUMMARY: 0 errors
+[20:11:40] initcheck empty ebola_exact_8 t64: ========= ERROR SUMMARY: 8 errors
+[20:11:40] initcheck empty c4_err_8 t256: ========= ERROR SUMMARY: 8 errors
+[20:11:41] racecheck empty ebola_exact_8 t64: ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+[20:11:42] racecheck empty c4_err_8 t256: ========= RACECHECK SUMMARY: 0 hazards displayed (0 errors, 0 warnings)
+[20:11:43] repeat base c4_err_2k rc=0
+[20:11:43] repeat base c4_exact rc=0
+[20:11:44] repeat base c4_exact_2k rc=0
+[20:11:45] repeat base ebola_exact_2k rc=0
+[20:11:46] repeat clear c4_err_2k rc=0
+[20:11:47] repeat clear c4_exact rc=0
+[20:11:48] repeat clear c4_exact_2k rc=0
+[20:11:49] repeat clear ebola_exact_2k rc=0
+[20:11:50] repeat empty c4_err_2k rc=0
+[20:11:50] repeat empty c4_exact rc=0
+[20:11:51] repeat empty c4_exact_2k rc=0
+[20:11:52] repeat empty ebola_exact_2k rc=0
+[20:13:56] timing rc=0
+[20:13:59] ncu base c4_exact rc=0
+[20:14:01] ncu base c4_err rc=0
+[20:14:09] ncu base ebola_err_2k rc=0
+[20:14:12] ncu clear c4_exact rc=0
+[20:14:14] ncu clear c4_err rc=0
+[20:14:22] ncu clear ebola_err_2k rc=0
+[20:14:24] ncu empty c4_exact rc=0
+[20:14:27] ncu empty c4_err rc=0
+[20:14:35] ncu empty ebola_err_2k rc=0

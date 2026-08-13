@@ -211,3 +211,114 @@ serve una query per processo.
   dell'handoff si aspettava: era dato in perdita o neutro. Il segno dice che su
   questo kernel conviene *dividere* il lavoro fra più thread, non accorparlo.
 - **`kMaxIJumpStack`** resta da riderivare da picchi reali.
+
+---
+
+## 8. Categoria 2, thread coarsening: dove si applica e dove no
+
+Era l'unico punto del TASK E senza un esperimento, e il motivo per cui era stato
+rimandato — «239 registri sono già al limite, il coarsening li aumenta» — è
+caduto con §4: a 138 registri ci sono 30 registri di margine prima di scendere
+sotto i 12 warp/SM. Due bersagli, due esiti opposti.
+
+### 8.1 Il clear: quattro parole per thread (`02127db`)
+
+Dopo lo split hot/cold il clear resta la fase più grossa del tier simple — non il
+7,7 % di `c4_err_2k`, ma il **57-69 % dei cicli** di una query esatta:
+
+| dataset | clear | loop | clear / totale |
+|---|---:|---:|---:|
+| `c4_exact` | 62,7 M | 27,6 M | **69,4 %** |
+| `c4_exact_2k` | 194,8 M | 142,9 M | **57,7 %** |
+| `ebola_exact_2k` | 13,8 M | 64,1 M | 17,7 % |
+| `c4_err_2k` | 35,8 M | 426,5 M | 7,7 % |
+
+È una parola per ciascuna delle 52 224 diagonali della finestra, tutte contigue e
+tutte con lo stesso valore: il caso da manuale per dare a ogni thread quattro
+elementi e scriverli con uno store da 128 bit. `fill_words` fa questo, con un
+prologo e un epilogo scalari perché l'allineamento **non si può assumere**:
+`sp_off` sta su un confine di 16 byte dentro `QueryState`, ma
+`sizeof(QueryState)` è 8 modulo 16, quindi uno stato su due parte sfasato e uno
+store `int4` lì dentro romperebbe. Il conto degli indici è verificato in locale
+su **95 468 combinazioni** di allineamento, finestra e thread per blocco —
+copertura esatta, nessuno sconfinamento — in `dati_grezzi/fill_words_test.cpp`.
+
+Nsight, 128 thread, contro il commit padre:
+
+| | `c4_exact` | `c4_err` | `ebola_err_2k` |
+|---|---:|---:|---:|
+| durata | 1 028 → **813 µs** (1,27×) | 1 359 → 1 283 µs (1,06×) | 2 379 → 2 374 µs (1,00×) |
+| istruzioni | 6,13 M → **3,80 M** (−38 %) | 20,9 M → 18,6 M (−11 %) | 67,4 M → 66,3 M (−2 %) |
+| richieste di store | 960 k → **335 k** (−65 %) | 1 110 k → 485 k | 1 646 k → 1 205 k |
+| byte scritti in DRAM | 140,8 → 135,2 MB | invariati | invariati |
+
+Di nuovo la firma di C1: **i byte non cambiano, le istruzioni sì, e la durata
+segue le istruzioni**. La quota di stalli da barriera *sale* (40,9 → 56,5 %) e non
+è un peggioramento: è la fase senza barriere che si è accorciata.
+
+**Il limite, detto chiaro.** Il clear coarsened vale sulla *prima* query di ogni
+slot, che è l'unica in cui il clear gira. Con `--repeat` su `c4_exact_2k`:
+iterazione 0 4,41 → **3,58 ms** (1,23×), iterazione ≥ 1 **0,391 → 0,392 ms**,
+identiche — perché lì il clear pigro lo ha già tolto del tutto. Le due
+ottimizzazioni non si sommano, si coprono: una rende la fase più veloce, l'altra
+la fa sparire.
+
+### 8.2 `densify`: il coarsening non si applica, e il dato lo dice
+
+L'altro candidato erano le fasi `densify`, il **53 % del loop** sul tier complex.
+Prima di scriverlo ho misurato quanto è grande il tile: `sp_ndiags` esce dal path
+CPU, che usa la stessa `QueryState` e produce lo stesso output byte per byte, con
+un istogramma sui quattro dataset.
+
+| dataset | chiamate | media | max | con `ndiags == 0` |
+|---|---:|---:|---:|---:|
+| `c4_err` | 10 707 | 2,77 | 37 | 45,5 % |
+| `c4_err_2k` | 41 400 | 2,57 | 41 | 46,9 % |
+| `ebola_err_2k` | 41 568 | 2,49 | 41 | 47,4 % |
+| `c4_exact` | 1 551 | 0,00 | 0 | 100 % |
+
+**Il wavefront è 2,5 diagonali, con un massimo di 41.** Il loop di `densify` fa
+quindi *un solo tile* anche a 64 thread per blocco: non c'è nessun round da
+accorpare, e dare quattro diagonali a testa lascerebbe soltanto 11 thread attivi
+su 41 invece di 41. Misurato prima di scriverlo, non dopo: il tentativo con le
+celle in registri costa anche 48 registri (138 → 186 già a una diagonale per
+thread), quindi avrebbe pagato occupancy per non guadagnare niente.
+
+Il 53 % del loop non è dunque lavoro di densificazione: è il **costo fisso** di
+densificare 2,5 celle — quattro `__syncthreads()` per tile, tre volte per vertice
+(I, D, M). Questo è il vero bersaglio, e non è coarsening: è la direzione
+opposta.
+
+### 8.3 Il corollario gratis: `densify` vuota (`23dc718`)
+
+L'istogramma dice anche che **il 46-47 % delle chiamate ha `ndiags == 0`**, e che
+in quel caso la funzione esegue due barriere e una scrittura in shared per
+produrre un Range identico a quello che aveva in mano entrando. Il ritorno
+anticipato è la stessa cosa senza le barriere; l'unica scrittura saltata è
+l'aggiornamento del picco, che non può muoversi quando nessuno spinge
+(`range_start <= sc_peak_wf` per costruzione, e il codice seriale aggiorna il
+picco solo quando spinge davvero).
+
+Vale poco da solo — 1 % su `ebola_err_2k`, 0,2 % su `c4_exact` — ma è misurato e
+non costa niente.
+
+### 8.4 Esito
+
+| | 30/30 | memcheck | initcheck | racecheck | tier simple | tier complex |
+|---|:-:|:-:|:-:|:-:|---:|---:|
+| `02127db` clear coarsened | ✅ | 0 | 8 (i preesistenti) | 0 hazard | **1,20-1,28×** | 1,00-1,08× |
+| `23dc718` densify vuota | ✅ | 0 | 8 | 0 hazard | +0,2-4 % | +1 % |
+
+Cumulativo sul kernel a batch singolo: `c4_exact_2k` 4,58 → **3,58 ms**,
+`ebola_exact_2k` 1,55 → **1,29 ms**, `c4_exact_1k` 2,49 → **2,07 ms**; il tier
+complex resta dov'era, come previsto, perché lì il clear è l'1,5-7,7 % dei cicli.
+
+Una nota di onestà sulle misure: la matrice `timing.py` dava `ebola_err_2k` a 128
+thread in peggioramento del 6 % con `23dc718`, ma Nsight sullo stesso punto dà
+2 379 → 2 336 µs, cioè un miglioramento dell'1,8 %. Il wall e il kernel misurati
+con `timing.py` su tre run hanno una dispersione che a questa scala li rende
+inutilizzabili: **dove i due si contraddicono vale il contatore, non il
+cronometro.**
+
+**Con questo tutte e sei le categorie hanno un esperimento**, e la 2 ne ha due:
+uno che si applica e uno che il dato ha respinto prima di scriverlo.

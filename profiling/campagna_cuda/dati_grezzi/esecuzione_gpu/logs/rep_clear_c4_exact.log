@@ -1,0 +1,19 @@
+GPU iteration 0
+GPU timing: h2d 0.085216 ms; kernel 1.52451 ms; d2h 12.0334 ms; total 13.6431 ms
+GPU host stages: prepare 0.041575 ms; graph 207.042 ms; host_buffers 89.3198 ms; cpu_verification 0 ms; traceback 1.20194 ms; alignment_construction 0.167056 ms; align_batch 322.033 ms
+GPU iteration 1
+GPU timing: h2d 0.080032 ms; kernel 0.165888 ms; d2h 14.5021 ms; total 14.748 ms
+GPU host stages: prepare 0.079892 ms; graph 0.000124 ms; host_buffers 0.000441 ms; cpu_verification 0 ms; traceback 0.171154 ms; alignment_construction 0.162675 ms; align_batch 15.2482 ms
+GPU iteration 2
+GPU timing: h2d 0.067424 ms; kernel 0.165888 ms; d2h 11.9939 ms; total 12.2272 ms
+GPU host stages: prepare 0.058259 ms; graph 0.000198 ms; host_buffers 0.000462 ms; cpu_verification 0 ms; traceback 0.172077 ms; alignment_construction 0.149426 ms; align_batch 12.6896 ms
+GPU iteration 3
+GPU timing: h2d 0.07168 ms; kernel 0.171648 ms; d2h 12.0185 ms; total 12.2618 ms
+GPU host stages: prepare 0.057582 ms; graph 0.000126 ms; host_buffers 0.000555 ms; cpu_verification 0 ms; traceback 0.164472 ms; alignment_construction 0.143011 ms; align_batch 12.7126 ms
+GPU iteration 4
+GPU timing: h2d 0.069248 ms; kernel 0.194656 ms; d2h 11.9782 ms; total 12.2421 ms
+GPU host stages: prepare 0.048889 ms; graph 0.000125 ms; host_buffers 0.000422 ms; cpu_verification 0 ms; traceback 0.165751 ms; alignment_construction 0.116135 ms; align_batch 12.6508 ms
+GPU backend: threads/block 128; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.069248 kernel=0.194656 d2h=11.978240 total=12.242144
+GPU timing: h2d 0.069248 ms; kernel 0.194656 ms; d2h 11.9782 ms; total 12.2421 ms
+GPU host stages: prepare 0.048889 ms; graph 0.000125 ms; host_buffers 0.000422 ms; cpu_verification 0 ms; traceback 0.165751 ms; alignment_construction 0.116135 ms; align_batch 12.6508 ms
+Application timing: graph_parse 6.84847 ms; input_parse 0.445059 ms; gaf_serialization 1.05117 ms; output_flush 0.022559 ms; total 384.662 ms

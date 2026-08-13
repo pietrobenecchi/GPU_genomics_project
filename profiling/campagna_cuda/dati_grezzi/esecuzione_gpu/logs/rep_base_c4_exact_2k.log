@@ -1,0 +1,19 @@
+GPU iteration 0
+GPU timing: h2d 0.118784 ms; kernel 4.40787 ms; d2h 46.6919 ms; total 51.2186 ms
+GPU host stages: prepare 0.240632 ms; graph 159.394 ms; host_buffers 246.195 ms; cpu_verification 0 ms; traceback 0.538426 ms; alignment_construction 0.377485 ms; align_batch 499.207 ms
+GPU iteration 1
+GPU timing: h2d 0.109984 ms; kernel 0.390752 ms; d2h 46.6696 ms; total 47.1704 ms
+GPU host stages: prepare 0.194773 ms; graph 0.000211 ms; host_buffers 0.001704 ms; cpu_verification 0 ms; traceback 0.554843 ms; alignment_construction 0.344781 ms; align_batch 48.4092 ms
+GPU iteration 2
+GPU timing: h2d 0.126432 ms; kernel 0.394016 ms; d2h 46.6107 ms; total 47.1312 ms
+GPU host stages: prepare 0.108158 ms; graph 0.000501 ms; host_buffers 0.001648 ms; cpu_verification 0 ms; traceback 0.535273 ms; alignment_construction 0.256211 ms; align_batch 48.1827 ms
+GPU iteration 3
+GPU timing: h2d 0.119392 ms; kernel 0.396512 ms; d2h 46.6523 ms; total 47.1682 ms
+GPU host stages: prepare 0.102066 ms; graph 0.000214 ms; host_buffers 0.001809 ms; cpu_verification 0 ms; traceback 0.62935 ms; alignment_construction 0.383555 ms; align_batch 48.4311 ms
+GPU iteration 4
+GPU timing: h2d 0.139136 ms; kernel 0.405312 ms; d2h 46.7299 ms; total 47.2743 ms
+GPU host stages: prepare 0.098558 ms; graph 0.000135 ms; host_buffers 0.001649 ms; cpu_verification 0 ms; traceback 0.547345 ms; alignment_construction 0.24874 ms; align_batch 48.3435 ms
+GPU backend: threads/block 128; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.139136 kernel=0.405312 d2h=46.729889 total=47.274338
+GPU timing: h2d 0.139136 ms; kernel 0.405312 ms; d2h 46.7299 ms; total 47.2743 ms
+GPU host stages: prepare 0.098558 ms; graph 0.000135 ms; host_buffers 0.001649 ms; cpu_verification 0 ms; traceback 0.547345 ms; alignment_construction 0.24874 ms; align_batch 48.3435 ms
+Application timing: graph_parse 5.0332 ms; input_parse 0.890342 ms; gaf_serialization 2.4009 ms; output_flush 0.016251 ms; total 702.333 ms
