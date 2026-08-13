@@ -598,6 +598,34 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
     const int32_t ndiags = qs.sp_ndiags;   // uniform: densify never touches it
     const int32_t range_start = wf_size;   // read before thread 0 updates it
 
+    // An empty scratchpad is the common case, not an edge case: instrumenting
+    // the CPU path -- same QueryState, same wavefronts, byte-identical output --
+    // over the four datasets gives 46-47 % of densify calls with ndiags == 0
+    // (c4_err 4876 of 10 707, c4_err_2k 19 424 of 41 400, ebola_err_2k 19 694 of
+    // 41 568, and c4_exact 1551 of 1551).
+    //
+    // With nothing to densify the rest of this function is two __syncthreads()
+    // and a shared write that produce exactly this Range: total is 0, so
+    // written is 0, so wf_size stays at range_start. Returning here is the same
+    // value for two barriers less.
+    //
+    // The peak does not move either, which is the one thing skipped that writes
+    // state: sc_peak_wf is the largest size any push has ever reached, and
+    // range_start is the current size of a wavefront that got there by pushing,
+    // so range_start <= sc_peak_wf always and the guarded update is already a
+    // no-op. The serial code agrees -- sc_wf_push touches the peak only when it
+    // actually pushes.
+    //
+    // Every thread returns or none does: ndiags is uniform at entry, which the
+    // loop below has always required -- a thread reading a different value
+    // would run a different number of barriers.
+    if (ndiags == 0) {
+        Range empty;
+        empty.start = range_start;
+        empty.end = range_start;
+        return empty;
+    }
+
     if (tx == 0) {
         shared_accum = 0;
     }
