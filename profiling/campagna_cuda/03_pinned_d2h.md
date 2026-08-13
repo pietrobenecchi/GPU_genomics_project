@@ -94,11 +94,63 @@ un'ipotesi coerente con i dati e non un fatto: il wall su questa VM oscilla di
 ±130 ms fra run dello stesso punto, quindi i due segni positivi potrebbero anche
 essere solo rumore.
 
-Da misurare alla prossima sessione:
+### Quanto costa il page lock: misura locale, per proxy
 
-1. `host_buffers_ms` per taglia di batch, cioè il costo del page lock;
-2. lo stesso confronto con due batch nello stesso processo, dove l'allocazione si
-   ammortizza.
+`cudaHostAlloc` alloca, blocca le pagine in memoria e le registra presso il
+driver. I primi due passi, che sono quelli proporzionali alla dimensione, si
+misurano senza GPU con `mmap` + `mlock` (`dati_grezzi/pinbench.c`, questa
+macchina, non la VM):
+
+| payload | `mlock` | first touch |
+|---|---:|---:|
+| 72 MiB (256 query) | 19,1 ms | 3,9 ms |
+| 144 MiB (512) | 20,7 ms | 7,7 ms |
+| 288 MiB (1024) | 39,6 ms | 15,1 ms |
+| **576 MiB (2048)** | **83,3 ms** | 30,9 ms |
+
+Da qui due cose.
+
+**L'ordine di grandezza torna.** 83 ms di page lock sono esattamente la scala dei
++65 e +87 ms visti su `c4_exact_2k` e `ebola_exact_2k`. L'ipotesi regge.
+
+**Ma una parte del guadagno sulla D2H è uno spostamento, non un risparmio.** Il
+buffer pageable non veniva mai toccato prima della copia, quindi i suoi page
+fault di prima scrittura si pagavano *durante* la D2H ed erano dentro
+`d2h_ms` — quei 30,9 ms. Con il buffer pinned quel costo si sposta
+nell'allocazione. Dei ~360 ms tolti alla D2H, quindi, ~31 sono traslocati e non
+eliminati; il risparmio vero è l'altra parte, cioè la copia di staging che il
+driver non deve più fare.
+
+Il conto atteso sarebbe −360 +31 +83 ≈ −246 ms di wall, e ne sono stati osservati
+−87. Il resto non è spiegato: o `cudaHostAlloc` costa più di `mlock` (registrare
+le pagine presso il driver è un passo in più che questo proxy non misura), o è il
+rumore da ±130 ms della VM. **Serve `host_buffers_ms` per chiudere il conto**, e
+quello richiede una GPU.
+
+### Lifetime e footprint
+
+Le domande che il TASK pone su lifetime e memoria si rispondono staticamente:
+
+- **Proprietà e distruzione.** I tre buffer sono di `TheseusAlignerImpl` e
+  liberati nel suo distruttore, prima di qualunque teardown del runtime CUDA,
+  perché l'aligner è una variabile locale di `main`. Nessun ordine di
+  distruzione statica in gioco.
+- **Crescita monotona.** I buffer crescono e non si restringono mai: un processo
+  che ha visto una volta un batch da 2048 tiene 576 MiB **bloccati in memoria**
+  per sempre. La memoria pinned non è paginabile, quindi è memoria sottratta al
+  sistema, non solo al processo. È il prezzo dichiarato dell'ottimizzazione, ed
+  è accettabile per una CLI; per un servizio di lunga durata varrebbe la pena
+  liberare sopra una soglia.
+- **Fallimento dell'allocazione.** Si ricade sui `std::vector` e `_host_capacity`
+  torna a 0, quindi il batch successivo ritenta. Corretto; leggermente
+  dispendioso se il page lock fallisce sistematicamente, mai scorretto.
+
+### Resta da misurare su GPU
+
+1. `host_buffers_ms` per taglia di batch, cioè il costo reale di `cudaHostAlloc`
+   contro il proxy `mlock` qui sopra;
+2. `--repeat 5`, dove l'allocazione si ammortizza su più batch: è il caso per cui
+   il buffer persistente è progettato, e la CLI a batch singolo non lo è.
 
 ## 5. Verdetto provvisorio
 

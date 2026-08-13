@@ -148,11 +148,37 @@ Le soglie da superare per guadagnare qualcosa sono quindi precise:
    i puntatori shared, `score`, `v`, `query_len` attraversano l'intero
    `process_vertex`.
 
-**Che cosa non è stato fatto.** Né la riduzione naturale del live set, né
-l'esperimento `-maxrregcount`. Quest'ultimo è pronto come misura e costa una
-build: `-maxrregcount=128` porta a 16 warp/SM e mostra il trade-off fra occupancy
-guadagnata e spill; il TASK dice giustamente di usarlo solo come sonda e non come
-soluzione, ed è così che va letto.
+**La sonda `-maxrregcount`, misurata.** Non serve una GPU: `ptxas -v` dà registri
+e spill a tempo di compilazione, e il toolkit CUDA 12.8.93 installato in locale è
+la stessa versione della VM. Kernel `theseus_align_batch_kernel`, `-arch=sm_75`:
+
+| `-maxrregcount` | registri | warp/SM | occupancy | stack | spill store | spill load |
+|---:|---:|---:|---:|---:|---:|---:|
+| nessuno | 226 | 9 | 28,1 % | 736 B | **0** | **0** |
+| 200 | 200 | 10 | 31,2 % | 752 B | 12 B | 12 B |
+| 168 | 168 | 12 | 37,5 % | 800 B | 72 B | 168 B |
+| 128 | 128 | 16 | 50,0 % | 896 B | 232 B | 400 B |
+| 112 | 112 | 18 | 56,2 % | 928 B | 296 B | 464 B |
+| 96 | 96 | 21 | 65,6 % | 960 B | 360 B | 528 B |
+| 80 | 80 | 25 | 78,1 % | 992 B | 436 B | 604 B |
+| 64 | 64 | 32 | 100,0 % | 1024 B | 564 B | 748 B |
+
+Il trade-off è graduale, non a scalino: non c'è un punto in cui gli spill
+esplodono. Il candidato più interessante è **168**, che compra il 50 % di
+occupancy in più (8 → 12 warp) per 72 byte di spill store per thread; a 128 si
+raddoppia l'occupancy ma gli spill store triplicano ancora. Quale dei due vinca
+dipende da quanto la latenza nascosta dai warp in più ripaghi il traffico di
+local memory, e **quello si decide solo misurando su GPU** — il TASK ha ragione a
+chiamarla una sonda e non una soluzione.
+
+Va anche detto che il numero di partenza è cambiato durante la campagna: 239
+registri erano la baseline, ma il tiling della query in shared (§5) li ha portati
+a **226**, cioè da 8 a 9 warp per SM, perché sparisce il percorso di
+indirizzamento globale per la query. È l'unico effetto sull'occupancy prodotto
+finora, ed è arrivato da una categoria diversa.
+
+**Che cosa resta da fare.** La riduzione naturale del live set, che è la strada
+che il TASK indica come preferibile e che nessuna di queste misure sostituisce.
 
 Va detto anche perché non è la prima leva. Il modello di §3 dice che la durata è
 `istruzioni × latenza per istruzione`: raddoppiare i warp residenti aiuta il
@@ -167,11 +193,16 @@ il tetto residuo, non il collo di bottiglia che è stato appena rimosso.
 | 1 privatization | n/a (analisi) | — | — | — |
 | 2 coarsening | **no** | — | — | — |
 | 3 coalescing | sì ×2 | 10/10 | 30/30 | **sì** |
-| 4 divergence | sì | 5/5 ctest | no | no |
-| 5 tiling | sì | 5/5 ctest | no | no |
-| 6 occupancy | analisi + sonda pronta | — | — | parziale (contatori raccolti) |
+| 4 divergence | sì | 5/5 ctest + 400k casi | **compila** (240 reg) | no |
+| 5 tiling | sì | 5/5 ctest | **compila** (226 reg) | no |
+| 6 occupancy | analisi + sonda **misurata** | — | — | registri e spill sì, effetto sul tempo no |
 
-Le categorie 4 e 5 hanno commit isolati e compilano solo sotto `nvcc`, che su
-questa macchina non c'è: la sessione Colab è caduta e il servizio ha poi smesso
-di assegnare T4. **Non sono state compilate né validate su GPU**, e finché non lo
-saranno vanno considerate scritte, non verificate.
+Tutti i commit **compilano sotto `nvcc` 12.8.93 per `sm_75`**: il toolkit è stato
+installato in locale (`conda create -p ~/.local/opt/cudac -c nvidia cuda-nvcc`),
+e compilare non richiede una GPU — serve il toolkit, non il driver. È così che
+sono stati ottenuti i registri, gli spill e la sonda `-maxrregcount`, e così è
+stato trovato un errore di compilazione in `align_gpu.cu` che il solo build host
+non poteva vedere.
+
+Quello che manca è **eseguire**: la regressione 30/30 e i tempi delle categorie 4
+e 5 richiedono una GPU e non sono stati presi.
