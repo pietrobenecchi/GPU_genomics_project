@@ -1436,6 +1436,25 @@ struct DeviceWorkspace {
     size_t batch_capacity = 0;
 };
 
+void *alloc_host_pinned(size_t bytes) {
+    if (bytes == 0) {
+        return nullptr;
+    }
+    void *buffer = nullptr;
+    const cudaError_t err = cudaHostAlloc(&buffer, bytes, cudaHostAllocDefault);
+    if (err != cudaSuccess) {
+        set_error("cudaHostAlloc(host batch buffers)", err);
+        return nullptr;
+    }
+    return buffer;
+}
+
+void free_host_pinned(void *buffer) {
+    if (buffer != nullptr) {
+        cudaFreeHost(buffer);
+    }
+}
+
 DeviceWorkspace *create_workspace() { return new DeviceWorkspace(); }
 
 void free_workspace(DeviceWorkspace *workspace) {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 /**
@@ -157,6 +158,25 @@ Status align_batch(const BatchView &batch,
 
 DeviceWorkspace *create_workspace();
 void free_workspace(DeviceWorkspace *workspace);
+
+/**
+ * @brief Page-locked host memory, for buffers the device copies into.
+ *
+ * The compact traceback state is the batch's whole D2H payload -- 288 KB per
+ * query, 590 MB for 2048 -- and a freshly allocated pageable buffer pays a page
+ * fault per page on the way in, on top of the staging copy the driver has to
+ * make because it cannot DMA into pageable memory. Allocating it once, page
+ * locked, and keeping it for the aligner's lifetime removes both.
+ *
+ * The size is in bytes and the contents are not initialised: align_batch
+ * overwrites every buffer it is given. free_host_pinned accepts nullptr. On a
+ * build without CUDA these fall back to malloc/free, so the caller needs no
+ * second path.
+ *
+ * @return Page-locked buffer, or nullptr if the allocation failed
+ */
+void *alloc_host_pinned(size_t bytes);
+void free_host_pinned(void *buffer);
 
 /**
  * @brief Copy the graph to device memory, once.

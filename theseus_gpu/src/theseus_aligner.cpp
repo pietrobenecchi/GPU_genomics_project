@@ -225,10 +225,29 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
 
     gpu::BatchView view{chars.data(), offsets.data(),
                         static_cast<int32_t>(seqs.size())};
+    // Page-locked and kept across batches. They are the batch's whole D2H
+    // payload, and a fresh pageable allocation made the copy pay a fault per
+    // page plus the driver's staging copy; see host_batch_buffers().
     const auto host_buffers_start = std::chrono::steady_clock::now();
-    std::vector<int32_t> device_lengths(seqs.size(), -1);
-    std::vector<gpu::AlignResult> device_results(seqs.size());
-    std::vector<CompactTracebackState> device_states(seqs.size());
+    int32_t *device_lengths = nullptr;
+    gpu::AlignResult *device_results = nullptr;
+    CompactTracebackState *device_states = nullptr;
+    std::vector<int32_t> fallback_lengths;
+    std::vector<gpu::AlignResult> fallback_results;
+    std::vector<CompactTracebackState> fallback_states;
+    if (!aligner_impl_->host_batch_buffers(seqs.size(), &device_states,
+                                           &device_results, &device_lengths)) {
+        // Page locking failed. The batch still runs, just without the benefit.
+        fallback_lengths.assign(seqs.size(), -1);
+        fallback_results.resize(seqs.size());
+        fallback_states.resize(seqs.size());
+        device_lengths = fallback_lengths.data();
+        device_results = fallback_results.data();
+        device_states = fallback_states.data();
+    }
+    // The -1 is what the layout check below tests against, and the buffer is
+    // reused, so a stale length from the previous batch would pass it.
+    std::fill(device_lengths, device_lengths + seqs.size(), -1);
     if (report != nullptr) report->host_buffers_ms = elapsed_ms(host_buffers_start);
     gpu::AlignOptions options;
     options.threads_per_block = gpu_threads_per_block;
@@ -236,8 +255,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     const gpu::Status status = gpu::align_batch(
         view, device_graph, aligner_impl_->device_workspace(),
         start_node_ids.data(), start_offset_values.data(),
-        aligner_impl_->gpu_scoring(), options, device_results.data(),
-        device_states.data(), device_lengths.data());
+        aligner_impl_->gpu_scoring(), options, device_results,
+        device_states, device_lengths);
 
     if (report != nullptr) {
         report->device_used = (status == gpu::Status::Ok ||
@@ -334,7 +353,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     }
 
     if (report != nullptr && status == gpu::Status::Ok) {
-        for (const CompactTracebackState &state : device_states) {
+        for (size_t i = 0; i < seqs.size(); ++i) {
+            const CompactTracebackState &state = device_states[i];
             if (state.capacity_exceeded) {
                 report->query_state_capacity_exceeded = true;
                 report->wavefront_capacity_exceeded = true;

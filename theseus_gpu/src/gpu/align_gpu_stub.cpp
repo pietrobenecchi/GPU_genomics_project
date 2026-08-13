@@ -6,6 +6,8 @@
 
 #include "gpu/align_gpu.h"
 
+#include <cstdlib>
+
 namespace theseus {
 namespace gpu {
 
@@ -23,6 +25,11 @@ Status align_batch(const BatchView &, const DeviceGraph *, DeviceWorkspace *, co
 
 DeviceWorkspace *create_workspace() { return nullptr; }
 void free_workspace(DeviceWorkspace *) {}
+
+// No device, so nothing to page-lock for: plain host memory has the same
+// contract and the caller cannot tell the difference.
+void *alloc_host_pinned(size_t bytes) { return std::malloc(bytes); }
+void free_host_pinned(void *buffer) { std::free(buffer); }
 
 DeviceGraph *upload_graph(const GraphCsrView &) { return nullptr; }
 

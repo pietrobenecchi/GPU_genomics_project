@@ -123,6 +123,26 @@ public:
     gpu::DeviceWorkspace *device_workspace() const { return _device_workspace; }
 
     /**
+     * @brief The three host buffers align_batch writes its results into, page
+     * locked and kept across batches.
+     *
+     * They used to be std::vectors built per batch. The compact traceback state
+     * is 288 KB per query, so on 2048 queries that is a 590 MB allocation that
+     * has never been touched, and the D2H that fills it pays a fault per page
+     * and a staging copy, because the driver cannot DMA into pageable memory.
+     * Here they are allocated once with cudaHostAlloc, grown only when a batch
+     * needs more room than the last one did, and freed with the aligner.
+     *
+     * The buffers are handed out uninitialised: align_batch writes every entry
+     * of all three. Returns false if the allocation failed, in which case the
+     * pointers are left null and the caller must fall back.
+     */
+    bool host_batch_buffers(size_t queries,
+                            CompactTracebackState **out_states,
+                            gpu::AlignResult **out_results,
+                            int32_t **out_lengths);
+
+    /**
      * @brief Host-side lookup used before launching a GPU batch. Kernels receive
      * numeric vertex ids; graph names stay on the host for parsing and output.
      */
@@ -467,6 +487,13 @@ private:
     gpu::DeviceGraph *_device_graph = nullptr;
     gpu::DeviceWorkspace *_device_workspace = nullptr;
     bool _device_graph_attempted = false;   // Guards against retrying a failed upload
+
+    // Page-locked host batch buffers, see host_batch_buffers(). _host_capacity
+    // is in queries, and is 0 while nothing is allocated.
+    size_t _host_capacity = 0;
+    CompactTracebackState *_host_states = nullptr;
+    gpu::AlignResult *_host_results = nullptr;
+    int32_t *_host_lengths = nullptr;
 
     std::string_view _seq;
 

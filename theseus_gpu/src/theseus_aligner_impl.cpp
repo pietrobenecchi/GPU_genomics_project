@@ -57,8 +57,47 @@ TheseusAlignerImpl::TheseusAlignerImpl(const Penalties &penalties,
 }
 
 TheseusAlignerImpl::~TheseusAlignerImpl() {
+    gpu::free_host_pinned(_host_states);
+    gpu::free_host_pinned(_host_results);
+    gpu::free_host_pinned(_host_lengths);
     gpu::free_workspace(_device_workspace);
     gpu::free_graph(_device_graph);
+}
+
+bool TheseusAlignerImpl::host_batch_buffers(size_t queries,
+                                            CompactTracebackState **out_states,
+                                            gpu::AlignResult **out_results,
+                                            int32_t **out_lengths) {
+    if (queries > _host_capacity) {
+        // Grow by reallocating rather than by extending: page-locked memory
+        // cannot be resized, and a batch larger than the last one is rare
+        // enough that one extra allocation is cheaper than tracking chunks.
+        gpu::free_host_pinned(_host_states);
+        gpu::free_host_pinned(_host_results);
+        gpu::free_host_pinned(_host_lengths);
+        _host_states = static_cast<CompactTracebackState *>(
+            gpu::alloc_host_pinned(sizeof(CompactTracebackState) * queries));
+        _host_results = static_cast<gpu::AlignResult *>(
+            gpu::alloc_host_pinned(sizeof(gpu::AlignResult) * queries));
+        _host_lengths = static_cast<int32_t *>(
+            gpu::alloc_host_pinned(sizeof(int32_t) * queries));
+        if (_host_states == nullptr || _host_results == nullptr ||
+            _host_lengths == nullptr) {
+            gpu::free_host_pinned(_host_states);
+            gpu::free_host_pinned(_host_results);
+            gpu::free_host_pinned(_host_lengths);
+            _host_states = nullptr;
+            _host_results = nullptr;
+            _host_lengths = nullptr;
+            _host_capacity = 0;
+            return false;
+        }
+        _host_capacity = queries;
+    }
+    *out_states = _host_states;
+    *out_results = _host_results;
+    *out_lengths = _host_lengths;
+    return true;
 }
 
 gpu::DeviceGraph *TheseusAlignerImpl::device_graph() {
