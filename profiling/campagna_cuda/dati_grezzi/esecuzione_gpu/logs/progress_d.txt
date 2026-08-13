@@ -1,0 +1,12 @@
+[19:33:16] built zeroalloc build-gpu
+[19:33:36] built zeroalloc build-li
+[19:33:55] regr zeroalloc: 30 pass; REGRESSION_EXIT 0
+[19:33:55] initcheck zeroalloc ebola_exact_8: ========= ERROR SUMMARY: 8 errors
+[19:33:55] initcheck zeroalloc c4_err_8: ========= ERROR SUMMARY: 8 errors
+[19:33:56] memcheck zeroalloc: ========= ERROR SUMMARY: 0 errors
+[19:33:57] repeat zeroalloc c4_err_2k rc=0
+[19:33:57] repeat zeroalloc c4_exact rc=0
+[19:33:58] repeat zeroalloc ebola_exact_2k rc=0
+[19:34:40] timing rc=0
+[19:34:42] ncu zeroalloc c4_err rc=0
+[19:34:44] ncu zeroalloc ebola_err_2k rc=0

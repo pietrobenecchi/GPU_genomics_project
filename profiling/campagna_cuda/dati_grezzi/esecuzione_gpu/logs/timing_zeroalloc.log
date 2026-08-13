@@ -1,0 +1,19 @@
+zeroalloc ebola_exact_smoke  thr 128  wall    331.5  kernel    0.69  h2d   0.05  d2h     6.32    772.1 q/s
+zeroalloc c4_exact           thr 128  wall    377.0  kernel    1.56  h2d   0.06  d2h    12.45   1358.0 q/s
+zeroalloc c4_exact           thr  64  wall    376.1  kernel    1.73  h2d   0.06  d2h    12.48   1361.2 q/s
+zeroalloc c4_exact           thr 256  wall    380.3  kernel    1.39  h2d   0.06  d2h    12.49   1346.4 q/s
+zeroalloc ebola_error_smoke  thr 128  wall    309.3  kernel    1.17  h2d   0.04  d2h     6.33    827.7 q/s
+zeroalloc c4_err             thr 128  wall    376.5  kernel    1.91  h2d   0.06  d2h    12.42   1359.9 q/s
+zeroalloc c4_err             thr  64  wall    377.7  kernel    2.11  h2d   0.06  d2h    12.46   1355.6 q/s
+zeroalloc c4_err             thr 256  wall    444.4  kernel    2.33  h2d   0.07  d2h    12.51   1152.1 q/s
+zeroalloc c4_exact_1k        thr 128  wall    532.2  kernel    2.50  h2d   0.08  d2h    24.44   1924.1 q/s
+zeroalloc c4_err_1k          thr 128  wall    520.4  kernel    3.06  h2d   0.09  d2h    24.46   1967.6 q/s
+zeroalloc c4_exact_2k        thr 128  wall    746.4  kernel    4.44  h2d   0.12  d2h    47.93   2743.8 q/s
+zeroalloc c4_err_2k          thr 128  wall    753.3  kernel    4.66  h2d   0.12  d2h    47.96   2718.6 q/s
+zeroalloc c4_err_2k          thr  64  wall    915.4  kernel    5.29  h2d   0.13  d2h    48.06   2237.3 q/s
+zeroalloc c4_err_2k          thr 256  wall    746.0  kernel    7.19  h2d   0.12  d2h    48.02   2745.4 q/s
+zeroalloc ebola_exact_2k     thr 128  wall    737.1  kernel    1.39  h2d   0.12  d2h    47.97   2778.6 q/s
+zeroalloc ebola_err_2k       thr 128  wall    754.8  kernel    3.16  h2d   0.12  d2h    47.98   2713.2 q/s
+zeroalloc ebola_err_2k       thr  64  wall    912.3  kernel    2.84  h2d   0.13  d2h    48.00   2244.9 q/s
+zeroalloc ebola_err_2k       thr 256  wall    747.0  kernel    6.49  h2d   0.12  d2h    47.98   2741.6 q/s
+WROTE /content/logs/timing.json

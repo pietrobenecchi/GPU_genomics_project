@@ -1,0 +1,32 @@
+[19:15:10] built regfix (7d2ce8a)
+[19:15:29] regr regfix: 30 pass; REGRESSION_EXIT 0
+[19:15:29] repeat prelazy c4_err_2k rc=0
+[19:15:30] repeat prelazy ebola_exact_2k rc=0
+[19:15:31] repeat prelazy c4_exact rc=0
+[19:15:32] repeat lazy c4_err_2k rc=0
+[19:15:33] repeat lazy ebola_exact_2k rc=0
+[19:15:33] repeat lazy c4_exact rc=0
+[19:15:34] repeat tile c4_err_2k rc=0
+[19:15:35] repeat tile ebola_exact_2k rc=0
+[19:15:35] repeat tile c4_exact rc=0
+[19:15:36] repeat regfix c4_err_2k rc=0
+[19:15:37] repeat regfix ebola_exact_2k rc=0
+[19:15:38] repeat regfix c4_exact rc=0
+[19:15:38] B2 done
+[19:19:35] B3 timing rc=0
+[19:19:38] ncu c1 c4_err rc=0
+[19:19:46] ncu c1 ebola_err_2k rc=0
+[19:19:48] ncu tile c4_err rc=0
+[19:19:56] ncu tile ebola_err_2k rc=0
+[19:19:59] ncu regfix c4_err rc=0
+[19:20:06] ncu regfix ebola_err_2k rc=0
+[19:20:30] built c1 -lineinfo
+[19:20:30] initcheck c1 ebola_exact_8: ========= ERROR SUMMARY: 8 errors
+[19:20:30] initcheck c1 c4_err_8: ========= ERROR SUMMARY: 8 errors
+[19:20:53] built nomemset -lineinfo
+[19:21:14] initcheck nomemset ebola_exact_8: ========= ERROR SUMMARY: 73758 errors
+[19:21:35] initcheck nomemset c4_err_8: ========= ERROR SUMMARY: 73700 errors
+[19:21:55] built regfix -lineinfo
+[19:22:16] initcheck regfix ebola_exact_8: ========= ERROR SUMMARY: 73758 errors
+[19:22:37] initcheck regfix c4_err_8: ========= ERROR SUMMARY: 73700 errors
+[19:22:37] ALL DONE

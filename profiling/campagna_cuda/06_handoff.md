@@ -1,5 +1,13 @@
 # Handoff della campagna CUDA
 
+> ✅ **Eseguito.** La sessione con GPU descritta qui è stata fatta il 13 agosto
+> 2026 su una seconda T4: i cinque commit sono validati 30/30, le due domande di
+> §3.4 sono chiuse, la riduzione dei registri di §4.1 è implementata e misurata,
+> e initcheck ha bocciato l'argomento di `f1c93ea`. I risultati sono in
+> [`07_esecuzione_gpu.md`](07_esecuzione_gpu.md), che va letto **prima** di
+> questo file: quanto segue resta valido come metodo e come elenco di ciò che
+> non è stato toccato (TASK F, chunking, coarsening), non come stato.
+
 Stato al 13 agosto 2026, branch `profili-nsight`, HEAD `715d419`.
 
 Questo documento è scritto per chi riprende il lavoro **quando ci sarà di nuovo
