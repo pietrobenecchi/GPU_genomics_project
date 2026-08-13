@@ -71,14 +71,14 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
 
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> gpu_alignments =
-      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128);
+      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128, true);
 
   // Run the identical batch again on the same aligner. Besides checking that
   // stale QueryState contents cannot affect correctness, this exercises the
   // persistent device workspace at stable query and batch capacities.
   theseus::GpuBatchReport reuse_report;
   std::vector<theseus::Alignment> reused_alignments =
-      gpu.align_batch_gpu(seqs, starts, offsets, &reuse_report, 128);
+      gpu.align_batch_gpu(seqs, starts, offsets, &reuse_report, 128, true);
 
   bool ok = true;
   if (require_device && !report.aligned_on_device) {
@@ -132,7 +132,7 @@ bool run_workspace_case(bool require_device) {
   theseus::Alignment cpu_alignment = cpu.align(seqs[0], starts[0], offsets[0]);
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> gpu_alignments =
-      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128);
+      gpu.align_batch_gpu(seqs, starts, offsets, &report, 128, true);
 
   bool ok = same_alignment(cpu_alignment, gpu_alignments[0]);
   if (require_device && !report.aligned_on_device) {

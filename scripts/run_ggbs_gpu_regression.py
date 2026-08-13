@@ -218,10 +218,10 @@ def validate_gpu_stderr(stderr: str) -> list[str]:
         errors.append("GPU run reported CPU fallback")
     if "notimplemented" in lower or "not implemented" in lower:
         errors.append("GPU run reported an unimplemented device path")
-    if "align kernel result verified against cpu" not in lower:
-        errors.append("GPU kernel verification message is missing")
     if "gaf reconstructed from gpu querystate" not in lower:
         errors.append("GAF was not reconstructed from GPU QueryState")
+    if "cpu_verification 0" not in lower:
+        errors.append("production GPU path unexpectedly ran CPU verification")
     return errors
 
 
@@ -284,9 +284,9 @@ def run_dataset(
         except subprocess.TimeoutExpired:
             failures.append(
                 f"{label}: TIMEOUT after {timeout:g}s.\n"
-                "The GPU path also runs the CPU aligner to verify the kernel, and on reads "
-                "needing a non-zero score that call does not return. See "
-                "theseus_gpu/data/validation/repro/README.md."
+                "The GPU production path did not finish. See "
+                "theseus_gpu/data/validation/repro/README.md for historical CPU-path "
+                "limitations."
             )
             continue
         if completed.returncode != 0:

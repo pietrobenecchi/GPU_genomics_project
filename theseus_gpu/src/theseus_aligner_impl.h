@@ -151,9 +151,10 @@ public:
      * a QueryState copied back from the CUDA kernel.
      */
     Alignment alignment_from_gpu_result(std::string_view seq,
-                                        int start_offset,
-                                        const QueryState &state,
-                                        const gpu::AlignResult &result);
+                                         int start_offset,
+                                         const QueryState &state,
+                                         const gpu::AlignResult &result,
+                                         double *traceback_ms = nullptr);
 
     /**
      * @brief Main alignment function. Aligns the given sequence to the graph

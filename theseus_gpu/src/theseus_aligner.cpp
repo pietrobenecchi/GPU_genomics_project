@@ -29,6 +29,7 @@
 #include "theseus/theseus_aligner.h"
 
 #include <cstdint>
+#include <chrono>
 
 #include "gpu/align_gpu.h"
 #include "theseus_aligner_impl.h"
@@ -170,7 +171,14 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     std::vector<std::string> &start_nodes,
     std::vector<int> &start_offsets,
     GpuBatchReport *report,
-    int gpu_threads_per_block) {
+    int gpu_threads_per_block,
+    bool verify_with_cpu) {
+
+    const auto batch_start = std::chrono::steady_clock::now();
+    const auto elapsed_ms = [](const auto &start) {
+        return std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+    };
 
     // Pre-flight the one bound that is derivable rather than measured.
     // extend_diagonal computes j = diag + offset with j indexing a vertex and
@@ -191,9 +199,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         }
     }
 
-    // Flatten into the concatenated layout the device consumes. This is built
-    // even though the alignment still happens on the CPU, so that the upload
-    // path is exercised by every GPU run rather than only once the kernel lands.
+    const auto prepare_start = std::chrono::steady_clock::now();
+    // Flatten into the concatenated layout the device consumes.
     std::vector<char> chars;
     std::vector<int32_t> offsets;
     std::vector<int32_t> start_node_ids;
@@ -209,15 +216,20 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         start_node_ids.push_back(aligner_impl_->graph_vertex_id(start_nodes[i]));
         start_offset_values.push_back(static_cast<int32_t>(start_offsets[i]));
     }
+    if (report != nullptr) report->batch_prepare_ms = elapsed_ms(prepare_start);
 
     // Uploaded once per aligner, on the first GPU batch.
+    const auto graph_start = std::chrono::steady_clock::now();
     gpu::DeviceGraph *device_graph = aligner_impl_->device_graph();
+    if (report != nullptr) report->graph_prepare_ms = elapsed_ms(graph_start);
 
     gpu::BatchView view{chars.data(), offsets.data(),
                         static_cast<int32_t>(seqs.size())};
+    const auto host_buffers_start = std::chrono::steady_clock::now();
     std::vector<int32_t> device_lengths(seqs.size(), -1);
     std::vector<gpu::AlignResult> device_results(seqs.size());
     std::vector<QueryState> device_states(seqs.size());
+    if (report != nullptr) report->host_buffers_ms = elapsed_ms(host_buffers_start);
     gpu::AlignOptions options;
     options.threads_per_block = gpu_threads_per_block;
 
@@ -247,7 +259,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
             report->message += std::string(" (") + error + ")";
         }
 
-        if (report->device_used) {
+        if (report->device_used && verify_with_cpu) {
             bool layout_ok = true;
             for (size_t i = 0; i < seqs.size(); ++i) {
                 if (device_lengths[i] != static_cast<int32_t>(seqs[i].size())) {
@@ -266,16 +278,20 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
 
     std::vector<Alignment> alignments;
     std::vector<gpu::AlignResult> cpu_results;
-    alignments.reserve(seqs.size());
-    cpu_results.reserve(seqs.size());
-    for (size_t i = 0; i < seqs.size(); ++i) {
-        alignments.push_back(
-            aligner_impl_->align(seqs[i], start_nodes[i], start_offsets[i]));
-        cpu_results.push_back(aligner_impl_->last_align_result());
+    if (status != gpu::Status::Ok || verify_with_cpu) {
+        const auto cpu_start = std::chrono::steady_clock::now();
+        alignments.reserve(seqs.size());
+        cpu_results.reserve(seqs.size());
+        for (size_t i = 0; i < seqs.size(); ++i) {
+            alignments.push_back(
+                aligner_impl_->align(seqs[i], start_nodes[i], start_offsets[i]));
+            cpu_results.push_back(aligner_impl_->last_align_result());
+        }
+        if (report != nullptr) report->cpu_verification_ms = elapsed_ms(cpu_start);
     }
 
-    bool use_gpu_backtrace = false;
-    if (report != nullptr && report->device_used) {
+    bool use_gpu_backtrace = status == gpu::Status::Ok && !verify_with_cpu;
+    if (status == gpu::Status::Ok && verify_with_cpu) {
         bool result_ok = true;
         size_t mismatch_idx = 0;
         for (size_t i = 0; i < seqs.size(); ++i) {
@@ -286,26 +302,45 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
             }
         }
         use_gpu_backtrace = result_ok;
-        report->message += result_ok
-            ? "; align kernel result verified against CPU"
-            : describe_align_result_mismatch(mismatch_idx, device_results[mismatch_idx],
-                                             cpu_results[mismatch_idx]);
+        if (report != nullptr) {
+            report->message += result_ok
+                ? "; align kernel result verified against CPU"
+                : describe_align_result_mismatch(mismatch_idx, device_results[mismatch_idx],
+                                                 cpu_results[mismatch_idx]);
+        }
     }
 
     if (use_gpu_backtrace) {
+        const auto construction_start = std::chrono::steady_clock::now();
+        double traceback_ms = 0.0;
         alignments.clear();
         alignments.reserve(seqs.size());
         for (size_t i = 0; i < seqs.size(); ++i) {
             alignments.push_back(aligner_impl_->alignment_from_gpu_result(
-                seqs[i], start_offsets[i], device_states[i], device_results[i]));
+                seqs[i], start_offsets[i], device_states[i], device_results[i],
+                &traceback_ms));
         }
         if (report != nullptr) {
+            const double reconstruction_ms = elapsed_ms(construction_start);
+            report->host_traceback_ms = traceback_ms;
+            report->alignment_construction_ms = reconstruction_ms - traceback_ms;
             report->result_from_device = true;
             report->message += "; GAF reconstructed from GPU QueryState with host backtrace";
             report->message += "; timing_ms h2d=" + std::to_string(report->h2d_ms) +
                                " kernel=" + std::to_string(report->kernel_ms) +
                                " d2h=" + std::to_string(report->d2h_ms) +
                                " total=" + std::to_string(report->end_to_end_ms);
+        }
+    }
+
+    if (report != nullptr && status == gpu::Status::Ok) {
+        for (const QueryState &state : device_states) {
+            if (state.capacity_exceeded) {
+                report->query_state_capacity_exceeded = true;
+                report->wavefront_capacity_exceeded = true;
+                report->message += "; DEVICE QUERYSTATE CAPACITY EXCEEDED";
+                break;
+            }
         }
     }
 
@@ -323,7 +358,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
                            std::to_string(report->scratchpad_span_available);
     }
 
-    if (report != nullptr && aligner_impl_->query_state_capacity_exceeded()) {
+    if (report != nullptr && verify_with_cpu &&
+        aligner_impl_->query_state_capacity_exceeded()) {
         report->query_state_capacity_exceeded = true;
         report->wavefront_capacity_exceeded = true;  // same underlying cause
         // Name the buffer that ran out first and what it wanted. Listing every
@@ -339,6 +375,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
             "can run on device";
     }
 
+    if (report != nullptr) report->align_batch_host_ms = elapsed_ms(batch_start);
     return alignments;
 }
 

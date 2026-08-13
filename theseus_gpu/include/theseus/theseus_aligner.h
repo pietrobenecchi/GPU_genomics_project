@@ -93,6 +93,13 @@ namespace theseus
         float kernel_ms = 0.0f;
         float d2h_ms = 0.0f;
         float end_to_end_ms = 0.0f;
+        double batch_prepare_ms = 0.0;
+        double graph_prepare_ms = 0.0;
+        double host_buffers_ms = 0.0;
+        double cpu_verification_ms = 0.0;
+        double host_traceback_ms = 0.0;
+        double alignment_construction_ms = 0.0;
+        double align_batch_host_ms = 0.0;
         std::string message;             // Human readable backend status
     };
 
@@ -161,14 +168,15 @@ namespace theseus
          *
          * The kernel computes one complete alignment per block, with the phases
          * that are independent per element spread across the block's threads.
-         * The host validates kernel results against the CPU and reconstructs the
-         * final GAF-compatible alignment from copied-back device state when the
-         * signatures match. Pass @p report to find out what the backend did.
+         * The normal path reconstructs the final GAF-compatible alignment from
+         * copied-back device state. Explicit validators can request a CPU
+         * endpoint comparison with @p verify_with_cpu.
          *
          * @param seqs Sequences to be aligned
          * @param start_nodes Starting node in the graph, one per sequence
          * @param start_offsets Starting offset within the starting node, one per sequence
          * @param report Optional backend status, see GpuBatchReport
+         * @param verify_with_cpu Run the CPU aligner as an explicit oracle
          * @return Alignments, in the same order as @p seqs
          */
         std::vector<Alignment> align_batch_gpu(
@@ -176,7 +184,8 @@ namespace theseus
                 std::vector<std::string> &start_nodes,
                 std::vector<int> &start_offsets,
                 GpuBatchReport *report = nullptr,
-                int gpu_threads_per_block = 128);
+                int gpu_threads_per_block = 128,
+                bool verify_with_cpu = false);
 
     private:
         std::unique_ptr<TheseusAlignerImpl> aligner_impl_;

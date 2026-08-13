@@ -29,6 +29,8 @@
 #include <string_view>
 #include "theseus_aligner_impl.h"
 
+#include <chrono>
+
 namespace theseus {
 
 TheseusAlignerImpl::TheseusAlignerImpl(const Penalties &penalties,
@@ -98,7 +100,8 @@ Alignment TheseusAlignerImpl::alignment_from_gpu_result(
     std::string_view seq,
     int start_offset,
     const QueryState &state,
-    const gpu::AlignResult &result) {
+    const gpu::AlignResult &result,
+    double *traceback_ms) {
     *_qs = state;
     _seq = seq;
     _start_offset = start_offset;
@@ -114,7 +117,12 @@ Alignment TheseusAlignerImpl::alignment_from_gpu_result(
     if (!_end || result.capacity_exceeded != 0) {
         return _alignment;
     }
+    const auto traceback_start = std::chrono::steady_clock::now();
     backtrace(0);
+    if (traceback_ms != nullptr) {
+        *traceback_ms += std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - traceback_start).count();
+    }
     return _alignment;
 }
 

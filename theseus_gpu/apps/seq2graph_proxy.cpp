@@ -24,6 +24,7 @@ struct CmdArgs {
   Backend backend = Backend::Cpu;
   int gpu_threads = 128;
   bool require_gpu_result = false;
+  bool verify_gpu_with_cpu = false;
 };
 
 // Sequences to align, together with where each one starts in the graph.
@@ -49,7 +50,9 @@ void help() {
       << "      --require-gpu-result     Fail unless the output came from the GPU\n"
       << "                               kernel. Without it a kernel that produced\n"
       << "                               nothing still writes the CPU's alignments,\n"
-      << "                               which compare equal to a CPU golden.\n";
+      << "                               which compare equal to a CPU golden.\n"
+      << "      --verify-gpu-with-cpu    Explicit validation mode: also run the CPU\n"
+      << "                               aligner and compare endpoint metadata.\n";
 }
 
 CmdArgs parse_args(int argc, char *const *argv) {
@@ -64,6 +67,7 @@ CmdArgs parse_args(int argc, char *const *argv) {
       {"backend", required_argument, nullptr, 'b'},
       {"gpu-threads", required_argument, nullptr, 1001},
       {"require-gpu-result", no_argument, nullptr, 1002},
+      {"verify-gpu-with-cpu", no_argument, nullptr, 1003},
       {nullptr, 0, nullptr, 0}};
 
   CmdArgs args;
@@ -107,6 +111,9 @@ CmdArgs parse_args(int argc, char *const *argv) {
       }
       case 1002:
         args.require_gpu_result = true;
+        break;
+      case 1003:
+        args.verify_gpu_with_cpu = true;
         break;
       case 1001:
         args.gpu_threads = std::stoi(optarg);
@@ -202,16 +209,20 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
  */
 bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
              std::ostream &out_stream, int gpu_threads,
-             bool require_gpu_result) {
+             bool require_gpu_result, bool verify_gpu_with_cpu,
+             double &serialization_ms) {
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> alignments = aligner.align_batch_gpu(
       inputs.sequences, inputs.start_vertices, inputs.start_offsets, &report,
-      gpu_threads);
+      gpu_threads, verify_gpu_with_cpu);
 
+  const auto serialization_start = std::chrono::steady_clock::now();
   for (size_t i = 0; i < alignments.size(); ++i) {
     aligner.print_alignment_as_gaf(alignments[i], out_stream,
                                    "seq_" + std::to_string(i));
   }
+  serialization_ms = std::chrono::duration<double, std::milli>(
+      std::chrono::steady_clock::now() - serialization_start).count();
 
   std::cerr << "GPU backend: " << report.message << "\n";
 
@@ -221,6 +232,14 @@ bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
     std::cerr << "GPU timing: h2d " << report.h2d_ms << " ms; kernel "
               << report.kernel_ms << " ms; d2h " << report.d2h_ms
               << " ms; total " << report.end_to_end_ms << " ms\n";
+    std::cerr << "GPU host stages: prepare " << report.batch_prepare_ms
+              << " ms; graph " << report.graph_prepare_ms
+              << " ms; host_buffers " << report.host_buffers_ms
+              << " ms; cpu_verification " << report.cpu_verification_ms
+              << " ms; traceback " << report.host_traceback_ms
+              << " ms; alignment_construction "
+              << report.alignment_construction_ms << " ms; align_batch "
+              << report.align_batch_host_ms << " ms\n";
   }
 
   // The output above is correct either way, because the backend falls back to
@@ -236,6 +255,11 @@ bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
 }
 
 int main(int argc, char *const *argv) {
+  const auto process_start = std::chrono::steady_clock::now();
+  const auto elapsed_ms = [](const auto &start) {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
+  };
   CmdArgs args = parse_args(argc, argv);
 
   if (args.graph_file.empty() || args.sequences_file.empty() ||
@@ -263,18 +287,24 @@ int main(int argc, char *const *argv) {
     return 1;
   }
 
+  const auto graph_parse_start = std::chrono::steady_clock::now();
   theseus::Penalties penalties(args.match, args.mismatch, args.gapo, args.gape);
   theseus::TheseusAligner aligner(penalties, graph_file);
+  const double graph_parse_ms = elapsed_ms(graph_parse_start);
 
+  const auto input_parse_start = std::chrono::steady_clock::now();
   Inputs inputs;
   read_seq_pos_data(seq_file, inputs);
+  const double input_parse_ms = elapsed_ms(input_parse_start);
 
   auto start = std::chrono::steady_clock::now();
 
   bool gpu_ok = true;
+  double serialization_ms = 0.0;
   if (args.backend == Backend::Gpu) {
     gpu_ok = run_gpu(aligner, inputs, output_file, args.gpu_threads,
-                     args.require_gpu_result);
+                     args.require_gpu_result, args.verify_gpu_with_cpu,
+                     serialization_ms);
   } else {
     run_cpu(aligner, inputs, output_file);
   }
@@ -285,6 +315,15 @@ int main(int argc, char *const *argv) {
   std::cout << "Aligned " << inputs.sequences.size() << " sequences in "
             << micros << " microseconds on "
             << (args.backend == Backend::Gpu ? "gpu" : "cpu") << "\n";
+
+  const auto output_start = std::chrono::steady_clock::now();
+  output_file.flush();
+  const double output_ms = elapsed_ms(output_start);
+  std::cerr << "Application timing: graph_parse " << graph_parse_ms
+            << " ms; input_parse " << input_parse_ms
+            << " ms; gaf_serialization " << serialization_ms
+            << " ms; output_flush " << output_ms
+            << " ms; total " << elapsed_ms(process_start) << " ms\n";
 
   return gpu_ok ? 0 : 2;
 }
