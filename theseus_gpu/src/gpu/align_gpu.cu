@@ -1654,10 +1654,11 @@ Status align_batch(const BatchView &batch,
             status = Status::CudaError;
             goto cleanup;
         }
-        QueryState *host_states = static_cast<QueryState *>(out_query_states);
+        CompactTracebackState *host_states =
+            static_cast<CompactTracebackState *>(out_query_states);
         for (int32_t i = 0; i < batch.num_seqs; ++i) {
             const TracebackMeta &meta = metadata[static_cast<size_t>(i)];
-            QueryState &host = host_states[i];
+            CompactTracebackState &host = host_states[i];
             host.bs_m_wf_size = meta.m_size;
             host.bs_m_jumps_wf_size = meta.m_jumps_size;
             host.bs_i_jumps_wf_size = meta.i_jumps_size;
@@ -1669,7 +1670,8 @@ Status align_batch(const BatchView &batch,
         }
 #define COPY_TRACEBACK_2D(field, label)                                      \
         do {                                                                 \
-            err = cudaMemcpy2D(host_states[0].field, sizeof(QueryState),      \
+            err = cudaMemcpy2D(host_states[0].field,                         \
+                               sizeof(CompactTracebackState),                \
                                d_states[0].field, sizeof(QueryState),         \
                                sizeof(host_states[0].field),                  \
                                static_cast<size_t>(batch.num_seqs),           \

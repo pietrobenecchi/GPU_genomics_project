@@ -99,10 +99,9 @@ gpu::AlignResult TheseusAlignerImpl::last_align_result() const {
 Alignment TheseusAlignerImpl::alignment_from_gpu_result(
     std::string_view seq,
     int start_offset,
-    const QueryState &state,
+    const CompactTracebackState &state,
     const gpu::AlignResult &result,
     double *traceback_ms) {
-    *_qs = state;
     _seq = seq;
     _start_offset = start_offset;
     _score = result.score;
@@ -118,7 +117,7 @@ Alignment TheseusAlignerImpl::alignment_from_gpu_result(
         return _alignment;
     }
     const auto traceback_start = std::chrono::steady_clock::now();
-    backtrace(0);
+    backtrace(0, traceback_view(state));
     if (traceback_ms != nullptr) {
         *traceback_ms += std::chrono::duration<double, std::milli>(
             std::chrono::steady_clock::now() - traceback_start).count();
@@ -242,7 +241,7 @@ Alignment TheseusAlignerImpl::align(
   _score -= 1;
 
   // Backtrace
-  backtrace(0);
+  backtrace(0, traceback_view(*_qs));
 
   return _alignment;
 }
@@ -693,14 +692,15 @@ void TheseusAlignerImpl::add_deletion()
 
 
 void TheseusAlignerImpl::one_backtrace_step(
-    Cell &curr_cell) {
+    Cell &curr_cell,
+    const TracebackWavefronts &wavefronts) {
 
   // Get previous cell
   // _score -= curr_cell.score_diff;
   Cell prev_cell;
-  if (curr_cell.from_matrix == Cell::Matrix::M) prev_cell = _qs->bs_m_wf[curr_cell.prev_pos];
-  else if (curr_cell.from_matrix == Cell::Matrix::MJumps) prev_cell = _qs->bs_m_jumps_wf[curr_cell.prev_pos];
-  else prev_cell = _qs->bs_i_jumps_wf[curr_cell.prev_pos];
+  if (curr_cell.from_matrix == Cell::Matrix::M) prev_cell = wavefronts.m[curr_cell.prev_pos];
+  else if (curr_cell.from_matrix == Cell::Matrix::MJumps) prev_cell = wavefronts.m_jumps[curr_cell.prev_pos];
+  else prev_cell = wavefronts.i_jumps[curr_cell.prev_pos];
 
   // Inside the same vertex or jump
   int num_indels;
@@ -737,7 +737,8 @@ void TheseusAlignerImpl::one_backtrace_step(
 
 
 // Main function of the backtracking process
-void TheseusAlignerImpl::backtrace(int initial_vertex)
+void TheseusAlignerImpl::backtrace(int initial_vertex,
+                                   const TracebackWavefronts &wavefronts)
 {
 
   Cell curr_pos = _start_pos;
@@ -747,7 +748,7 @@ void TheseusAlignerImpl::backtrace(int initial_vertex)
   _alignment.path.push_back(curr_pos.vertex_id);
   while (curr_pos.prev_pos != -1)
   {
-    one_backtrace_step(curr_pos);
+    one_backtrace_step(curr_pos, wavefronts);
   }
 
   add_matches(0, curr_pos.offset); // Add the matches until the beginning of the sequence

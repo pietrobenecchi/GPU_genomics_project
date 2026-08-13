@@ -148,11 +148,11 @@ public:
 
     /**
      * @brief Reconstruct an Alignment by running the existing host backtrace on
-     * a QueryState copied back from the CUDA kernel.
+     * the compact traceback state copied back from the CUDA kernel.
      */
     Alignment alignment_from_gpu_result(std::string_view seq,
                                          int start_offset,
-                                         const QueryState &state,
+                                         const CompactTracebackState &state,
                                          const gpu::AlignResult &result,
                                          double *traceback_ms = nullptr);
 
@@ -430,15 +430,19 @@ private:
      * @param curr_cell
      * @param curr_v
      */
-    void one_backtrace_step(Cell &curr_cell);
+    void one_backtrace_step(Cell &curr_cell,
+                            const TracebackWavefronts &wavefronts);
 
     /**
      * @brief Backtrace the alignment from the end vertex to the start vertex.
      *
      * @param initial_vertex
+     * @param wavefronts  The BeyondScope wavefronts to walk: this aligner's own
+     *                    QueryState after a CPU alignment, or the compact state
+     *                    read back from the kernel.
      */
-    void backtrace(
-        int initial_vertex);
+    void backtrace(int initial_vertex,
+                   const TracebackWavefronts &wavefronts);
 
     int32_t _score = 0;
 

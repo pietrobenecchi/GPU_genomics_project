@@ -140,7 +140,7 @@ const TimingReport &last_timing();
  * @param start_offsets     Host array of batch.num_seqs start offsets
  * @param scoring           Internal penalties and Scope ring size
  * @param out_results       Caller-owned buffer of batch.num_seqs result slots
- * @param out_query_states  Caller-owned QueryState buffer, opaque at this boundary
+ * @param out_query_states  Caller-owned CompactTracebackState buffer
  * @param out_seq_lengths   Caller-owned buffer of batch.num_seqs entries
  * @return Status           Ok only when the alignment itself ran on the device
  */

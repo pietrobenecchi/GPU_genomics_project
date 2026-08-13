@@ -228,7 +228,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     const auto host_buffers_start = std::chrono::steady_clock::now();
     std::vector<int32_t> device_lengths(seqs.size(), -1);
     std::vector<gpu::AlignResult> device_results(seqs.size());
-    std::vector<QueryState> device_states(seqs.size());
+    std::vector<CompactTracebackState> device_states(seqs.size());
     if (report != nullptr) report->host_buffers_ms = elapsed_ms(host_buffers_start);
     gpu::AlignOptions options;
     options.threads_per_block = gpu_threads_per_block;
@@ -325,7 +325,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
             report->host_traceback_ms = traceback_ms;
             report->alignment_construction_ms = reconstruction_ms - traceback_ms;
             report->result_from_device = true;
-            report->message += "; GAF reconstructed from GPU QueryState with host backtrace";
+            report->message += "; GAF reconstructed from compact GPU state with host backtrace";
             report->message += "; timing_ms h2d=" + std::to_string(report->h2d_ms) +
                                " kernel=" + std::to_string(report->kernel_ms) +
                                " d2h=" + std::to_string(report->d2h_ms) +
@@ -334,7 +334,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     }
 
     if (report != nullptr && status == gpu::Status::Ok) {
-        for (const QueryState &state : device_states) {
+        for (const CompactTracebackState &state : device_states) {
             if (state.capacity_exceeded) {
                 report->query_state_capacity_exceeded = true;
                 report->wavefront_capacity_exceeded = true;

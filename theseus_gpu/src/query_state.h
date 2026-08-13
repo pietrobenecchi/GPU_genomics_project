@@ -244,6 +244,66 @@ struct QueryState {
 };
 
 /**
+ * @brief Everything the host needs to reconstruct one device alignment, and
+ * nothing else.
+ *
+ * QueryState is the kernel's working set, not the shape of a result. The
+ * backtrace only ever reads the three BeyondScope wavefronts (through
+ * Cell::from_matrix and Cell::prev_pos) plus the capacity diagnostics, so the
+ * ScratchPad, the Scope ring and VerticesData never have to cross the bus or be
+ * materialised host-side. That is the whole difference between a 4.2 MB
+ * per-query result and a 288 KB one: a 512-query batch needs 147 MB here
+ * instead of 2.1 GB.
+ *
+ * The default constructor is user-provided and empty on purpose. It makes the
+ * type non-trivially-default-constructible so `std::vector<CompactTracebackState>(n)`
+ * value-initialises by calling it — which does nothing — instead of zero-filling
+ * a buffer that align_batch is about to overwrite in full.
+ */
+struct CompactTracebackState {
+    CompactTracebackState() noexcept {}
+
+    // Same names and element types as the QueryState fields they come from:
+    // align_batch copies them across with one strided cudaMemcpy2D per field.
+    Cell    bs_m_wf[kBeyondScopeCapacity];
+    Cell    bs_m_jumps_wf[kBeyondScopeCapacity];
+    Cell    bs_i_jumps_wf[kBeyondScopeCapacity];
+    int32_t bs_m_wf_size;
+    int32_t bs_m_jumps_wf_size;
+    int32_t bs_i_jumps_wf_size;
+
+    // Diagnostics, carried so a device-side overflow is still reported by the
+    // host that never sees the buffer that overflowed.
+    int32_t sc_peak_wf;
+    bool    capacity_exceeded;
+    int8_t  cap_reason;    // a CapBuffer value
+    int32_t cap_required;
+    int32_t cap_available;
+};
+
+/**
+ * @brief Read-only view of the three wavefronts the backtrace walks.
+ *
+ * The backtrace is one algorithm over cells, indifferent to whether the cells
+ * were produced by the CPU aligner into its QueryState or by the kernel into a
+ * CompactTracebackState. Binding the two sources here keeps a single traceback
+ * implementation instead of a per-step test of which one it is reading.
+ */
+struct TracebackWavefronts {
+    const Cell *m;
+    const Cell *m_jumps;
+    const Cell *i_jumps;
+};
+
+THESEUS_HD inline TracebackWavefronts traceback_view(const QueryState &qs) {
+    return TracebackWavefronts{qs.bs_m_wf, qs.bs_m_jumps_wf, qs.bs_i_jumps_wf};
+}
+
+THESEUS_HD inline TracebackWavefronts traceback_view(const CompactTracebackState &state) {
+    return TracebackWavefronts{state.bs_m_wf, state.bs_m_jumps_wf, state.bs_i_jumps_wf};
+}
+
+/**
  * @brief Which fixed-capacity buffer overflowed. Values are stable: they are
  * copied back from the device and printed by the host.
  */

@@ -218,8 +218,8 @@ def validate_gpu_stderr(stderr: str) -> list[str]:
         errors.append("GPU run reported CPU fallback")
     if "notimplemented" in lower or "not implemented" in lower:
         errors.append("GPU run reported an unimplemented device path")
-    if "gaf reconstructed from gpu querystate" not in lower:
-        errors.append("GAF was not reconstructed from GPU QueryState")
+    if "gaf reconstructed from compact gpu state" not in lower:
+        errors.append("GAF was not reconstructed from compact GPU state")
     if "cpu_verification 0" not in lower:
         errors.append("production GPU path unexpectedly ran CPU verification")
     return errors
