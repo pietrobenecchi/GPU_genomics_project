@@ -287,11 +287,29 @@ struct QueryState {
 struct CompactTracebackState {
     CompactTracebackState() noexcept {}
 
-    // Same names and element types as the QueryState fields they come from:
-    // align_batch copies them across with one strided cudaMemcpy2D per field.
-    Cell    bs_m_wf[kBeyondScopeCapacity];
-    Cell    bs_m_jumps_wf[kBeyondScopeCapacity];
-    Cell    bs_i_jumps_wf[kBeyondScopeCapacity];
+    // Views into the packed buffer align_batch fills, not storage.
+    //
+    // They used to be three Cell[kBeyondScopeCapacity] arrays, 288 KB per query
+    // whatever the query needed, copied by one strided cudaMemcpy2D per field.
+    // Instrumenting the CPU aligner -- same QueryState, same wavefronts, output
+    // byte-identical -- says what those 288 KB carry: on c4_err_2k the M
+    // wavefront averages 24,3 cells of 4096 and peaks at 438, the M jumps
+    // average 1,0, the I jumps 0,0. **0,21 % of the bytes moved are ever read**,
+    // and on c4_exact_2k 0,01 %.
+    //
+    // So align_batch packs the used prefixes on the device and copies them once,
+    // and these point into that buffer. Two consequences for the caller:
+    //
+    // - the cells live in the DeviceWorkspace's staging buffer, valid until the
+    //   next align_batch on that workspace. The backtrace runs right after the
+    //   call, which is the only use there has ever been, but it is a borrow now
+    //   and not a copy;
+    // - a size of 0 leaves its pointer pointing at the start of the query's
+    //   slice, which is one past the previous query's cells. Nothing reads it,
+    //   and the pointer is never null.
+    const Cell *bs_m_wf;
+    const Cell *bs_m_jumps_wf;
+    const Cell *bs_i_jumps_wf;
     int32_t bs_m_wf_size;
     int32_t bs_m_jumps_wf_size;
     int32_t bs_i_jumps_wf_size;

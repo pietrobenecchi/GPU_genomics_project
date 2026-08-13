@@ -225,9 +225,13 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
 
     gpu::BatchView view{chars.data(), offsets.data(),
                         static_cast<int32_t>(seqs.size())};
-    // Page-locked and kept across batches. They are the batch's whole D2H
-    // payload, and a fresh pageable allocation made the copy pay a fault per
-    // page plus the driver's staging copy; see host_batch_buffers().
+    // Page-locked and kept across batches; see host_batch_buffers(). They used
+    // to be the batch's whole D2H payload -- 288 KB of traceback per query,
+    // 576 MiB page-locked for 2048 of them, 250 ms of cudaHostAlloc on the
+    // first batch. The traceback cells now travel packed, in a staging buffer
+    // the workspace owns, so what is left here is three small arrays: the
+    // results, the lengths, and a CompactTracebackState that is sizes and
+    // pointers into that buffer.
     const auto host_buffers_start = std::chrono::steady_clock::now();
     int32_t *device_lengths = nullptr;
     gpu::AlignResult *device_results = nullptr;

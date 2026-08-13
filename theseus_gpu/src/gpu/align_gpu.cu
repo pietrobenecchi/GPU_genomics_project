@@ -18,6 +18,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <cstdlib>
 #include <vector>
 
 namespace theseus {
@@ -1505,6 +1506,43 @@ __global__ void traceback_meta_kernel(const QueryState *states, int32_t count,
 }
 
 /**
+ * @brief Gather the cells the host backtrace will read into one dense buffer.
+ *
+ * One block per query. Each block writes its three used prefixes -- M, M jumps,
+ * I jumps, in that order -- starting at base[i], the exclusive prefix sum of
+ * the three sizes that the host computed from the metadata it has just read
+ * back. Host and device agree because both derive the layout from the same
+ * numbers; nothing is scanned twice and no device-side scan is needed.
+ *
+ * This is what turns the traceback D2H from a fixed 288 KB per query into the
+ * bytes the query actually produced: 24 cells on average, 600 bytes, against
+ * 12 288 cells copied before.
+ */
+__global__ void pack_traceback_kernel(const QueryState *states, int32_t count,
+                                      const int32_t *base, Cell *packed) {
+    const int32_t i = static_cast<int32_t>(blockIdx.x);
+    if (i >= count) return;
+    const QueryState &state = states[i];
+    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+
+    Cell *out = packed + base[i];
+    const int32_t m = state.bs_m_wf_size;
+    const int32_t mj = state.bs_m_jumps_wf_size;
+    const int32_t ij = state.bs_i_jumps_wf_size;
+
+    for (int32_t k = tx; k < m; k += ntx) {
+        out[k] = state.bs_m_wf[k];
+    }
+    for (int32_t k = tx; k < mj; k += ntx) {
+        out[m + k] = state.bs_m_jumps_wf[k];
+    }
+    for (int32_t k = tx; k < ij; k += ntx) {
+        out[m + mj + k] = state.bs_i_jumps_wf[k];
+    }
+}
+
+/**
  * @brief Copy the CSR back out, one block per vertex.
  *
  * Each block reaches its own text and out-edges through the offset arrays,
@@ -1652,6 +1690,19 @@ struct DeviceWorkspace {
     TracebackMeta *traceback_meta = nullptr;
     size_t query_capacity = 0;
     size_t batch_capacity = 0;
+
+    // Staging for the packed traceback: the cells the backtrace will actually
+    // read, end to end, plus where each query's slice starts. Sized on the
+    // cells a batch really used, so they grow with the workload and not with
+    // kBeyondScopeCapacity. Kept on the workspace so that the page lock is paid
+    // once per process, like the other host buffers.
+    Cell *packed_device = nullptr;
+    int32_t *pack_offsets = nullptr;      // device, one base per query
+    size_t packed_device_capacity = 0;    // in cells
+    size_t pack_offsets_capacity = 0;     // in queries
+    Cell *packed_host = nullptr;
+    size_t packed_host_capacity = 0;      // in cells
+    bool packed_host_pinned = false;
 };
 
 void *alloc_host_pinned(size_t bytes) {
@@ -1685,6 +1736,15 @@ void free_workspace(DeviceWorkspace *workspace) {
     cudaFree(workspace->states);
     cudaFree(workspace->lengths);
     cudaFree(workspace->traceback_meta);
+    cudaFree(workspace->packed_device);
+    cudaFree(workspace->pack_offsets);
+    if (workspace->packed_host != nullptr) {
+        if (workspace->packed_host_pinned) {
+            cudaFreeHost(workspace->packed_host);
+        } else {
+            std::free(workspace->packed_host);
+        }
+    }
     delete workspace;
 }
 
@@ -1986,24 +2046,115 @@ Status align_batch(const BatchView &batch,
             host.cap_required = meta.cap_required;
             host.cap_available = meta.cap_available;
         }
-#define COPY_TRACEBACK_2D(field, label)                                      \
-        do {                                                                 \
-            err = cudaMemcpy2D(host_states[0].field,                         \
-                               sizeof(CompactTracebackState),                \
-                               d_states[0].field, sizeof(QueryState),         \
-                               sizeof(host_states[0].field),                  \
-                               static_cast<size_t>(batch.num_seqs),           \
-                               cudaMemcpyDeviceToHost);                       \
-            if (err != cudaSuccess) {                                        \
-                set_error((label), err);                                     \
-                status = Status::CudaError;                                  \
-                goto cleanup;                                                \
-            }                                                                \
-        } while (false)
-        COPY_TRACEBACK_2D(bs_m_wf, "cudaMemcpy2D(traceback M D2H)");
-        COPY_TRACEBACK_2D(bs_m_jumps_wf, "cudaMemcpy2D(traceback M jumps D2H)");
-        COPY_TRACEBACK_2D(bs_i_jumps_wf, "cudaMemcpy2D(traceback I jumps D2H)");
-#undef COPY_TRACEBACK_2D
+        // Pack on the device, copy once. The layout is the exclusive prefix
+        // sum of the three sizes just read back, computed here and handed to
+        // the kernel, so host and device agree without a second scan.
+        size_t total_cells = 0;
+        std::vector<int32_t> base(static_cast<size_t>(batch.num_seqs));
+        for (int32_t i = 0; i < batch.num_seqs; ++i) {
+            base[static_cast<size_t>(i)] = static_cast<int32_t>(total_cells);
+            const TracebackMeta &meta = metadata[static_cast<size_t>(i)];
+            total_cells += static_cast<size_t>(meta.m_size) +
+                           static_cast<size_t>(meta.m_jumps_size) +
+                           static_cast<size_t>(meta.i_jumps_size);
+            if (total_cells > 0x7fffffffu) {
+                set_error("packed traceback exceeds 2^31 cells", cudaSuccess);
+                status = Status::CudaError;
+                goto cleanup;
+            }
+        }
+        {
+            const size_t cells = total_cells > 0 ? total_cells : 1;
+            if (workspace->packed_device_capacity < cells) {
+                cudaFree(workspace->packed_device);
+                workspace->packed_device = nullptr;
+                workspace->packed_device_capacity = 0;
+                err = cudaMalloc(&workspace->packed_device, sizeof(Cell) * cells);
+                if (err != cudaSuccess) {
+                    set_error("cudaMalloc(packed traceback)", err);
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
+                workspace->packed_device_capacity = cells;
+            }
+            if (workspace->pack_offsets_capacity < static_cast<size_t>(batch.num_seqs)) {
+                cudaFree(workspace->pack_offsets);
+                workspace->pack_offsets = nullptr;
+                workspace->pack_offsets_capacity = 0;
+                err = cudaMalloc(&workspace->pack_offsets,
+                                 sizeof(int32_t) * static_cast<size_t>(batch.num_seqs));
+                if (err != cudaSuccess) {
+                    set_error("cudaMalloc(pack offsets)", err);
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
+                workspace->pack_offsets_capacity = static_cast<size_t>(batch.num_seqs);
+            }
+            if (workspace->packed_host_capacity < cells) {
+                // Page-locked if it can be: this is the batch's whole traceback
+                // payload now, and the copy is the reason the buffer exists.
+                // Pageable is a correct fallback, only slower.
+                if (workspace->packed_host != nullptr) {
+                    if (workspace->packed_host_pinned) {
+                        cudaFreeHost(workspace->packed_host);
+                    } else {
+                        std::free(workspace->packed_host);
+                    }
+                    workspace->packed_host = nullptr;
+                }
+                void *host_buffer = nullptr;
+                workspace->packed_host_pinned =
+                    cudaHostAlloc(&host_buffer, sizeof(Cell) * cells,
+                                  cudaHostAllocDefault) == cudaSuccess;
+                if (!workspace->packed_host_pinned) {
+                    cudaGetLastError();   // the failed alloc is handled, not propagated
+                    host_buffer = std::malloc(sizeof(Cell) * cells);
+                }
+                if (host_buffer == nullptr) {
+                    set_error("alloc(packed traceback host)", cudaErrorMemoryAllocation);
+                    workspace->packed_host_capacity = 0;
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
+                workspace->packed_host = static_cast<Cell *>(host_buffer);
+                workspace->packed_host_capacity = cells;
+            }
+
+            err = cudaMemcpy(workspace->pack_offsets, base.data(),
+                             sizeof(int32_t) * base.size(), cudaMemcpyHostToDevice);
+            if (err != cudaSuccess) {
+                set_error("cudaMemcpy(pack offsets H2D)", err);
+                status = Status::CudaError;
+                goto cleanup;
+            }
+            if (total_cells > 0) {
+                pack_traceback_kernel<<<batch.num_seqs, threads_per_block>>>(
+                    d_states, batch.num_seqs, workspace->pack_offsets,
+                    workspace->packed_device);
+                err = cudaGetLastError();
+                if (err != cudaSuccess) {
+                    set_error("pack_traceback_kernel launch", err);
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
+                err = cudaMemcpy(workspace->packed_host, workspace->packed_device,
+                                 sizeof(Cell) * total_cells, cudaMemcpyDeviceToHost);
+                if (err != cudaSuccess) {
+                    set_error("cudaMemcpy(packed traceback D2H)", err);
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
+            }
+            for (int32_t i = 0; i < batch.num_seqs; ++i) {
+                CompactTracebackState &host = host_states[i];
+                const Cell *slice = workspace->packed_host +
+                                    base[static_cast<size_t>(i)];
+                host.bs_m_wf = slice;
+                host.bs_m_jumps_wf = slice + host.bs_m_wf_size;
+                host.bs_i_jumps_wf = slice + host.bs_m_wf_size +
+                                     host.bs_m_jumps_wf_size;
+            }
+        }
     }
     if (ev_d2h != nullptr) {
         cudaEventRecord(ev_d2h);
