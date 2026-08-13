@@ -1052,6 +1052,14 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
 
     if (tx == 0) {
         qs.capacity_exceeded = false;
+        // cap_fail keeps the *first* failure, so it tests cap_reason against
+        // kCapNone: leaving it at whatever the previous batch put there would
+        // both hide a real failure and report a stale buffer name. It used to be
+        // established by the per-batch cudaMemset of the whole QueryState array,
+        // which no longer runs.
+        qs.cap_reason = kCapNone;
+        qs.cap_required = 0;
+        qs.cap_available = 0;
         // Scalar halves only; the block runs both clearing loops below.
         shared_span = sp_init_window(qs, -query_len, max_diag);
         sc_init(qs, scoring.nscores);
@@ -1626,12 +1634,24 @@ Status align_batch(const BatchView &batch,
         status = Status::CudaError;
         goto cleanup;
     }
-    err = cudaMemset(d_states, 0, states_bytes);
-    if (err != cudaSuccess) {
-        set_error("cudaMemset(query_states)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
+    // The QueryState array is deliberately *not* zeroed here. It used to be, at
+    // 4.4 MB per query -- 8.8 GB of writes for a 2048-query batch, more than
+    // everything else in the H2D window put together and, at 40.8 ms against a
+    // 4.7 ms kernel, the largest single cost of a batch after the D2H.
+    //
+    // Nothing needs it. align_one establishes every scalar it reads
+    // (sp_init_window, sc_init, vd_init_scalar, bs_new_alignment, the cap_*
+    // diagnostics) and clears the two arrays that are indexed without a size --
+    // sp_off over the window and vd_vertex_to_idx over the graph. Every other
+    // array in the QueryState is append-only behind a counter that those calls
+    // set to zero: a cell of bs_m_wf beyond bs_m_wf_size, an InvalidSeg beyond
+    // vd_m_invalid_size[a], a Scope wavefront entry beyond sc_i_wf_size[s] is
+    // never read, and vd_activate_vertex zeroes a vertex's own counters the
+    // first time it becomes active.
+    //
+    // That is an argument, not a proof, so it is checked rather than trusted:
+    // compute-sanitizer --tool initcheck reports a read of uninitialised device
+    // memory, and the regression runs under it.
 
     if (ev_h2d != nullptr) {
         cudaEventRecord(ev_h2d);
