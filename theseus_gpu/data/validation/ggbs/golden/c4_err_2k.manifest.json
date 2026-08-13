@@ -1,0 +1,33 @@
+{
+  "binary": "cpu_oracle/bin/seq2graph_proxy_oracle",
+  "binary_sha256": "49660462e7b83a408d8cf4b42289caca84bccc5083e1ae94b164ae394cbdb803",
+  "command": [
+    "cpu_oracle/bin/seq2graph_proxy_oracle",
+    "-g",
+    "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+    "-s",
+    "theseus_gpu/data/validation/ggbs/queries/c4_err_2k.queries",
+    "-f",
+    "theseus_gpu/data/validation/ggbs/golden/c4_err_2k.cpu.gaf"
+  ],
+  "elapsed_seconds": 0.008801913005299866,
+  "generated_at": "2026-08-13T09:58:48.634433+00:00",
+  "git_commit": "00ea1ef3e5e7772d21aabb4e27bc1e7fea861862",
+  "golden_gaf": "theseus_gpu/data/validation/ggbs/golden/c4_err_2k.cpu.gaf",
+  "golden_gaf_sha256": "21aefe5154799752c493c1805ae3b600cf45f7c6d04eb415cfb695286f30eb87",
+  "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+  "graph_sha256": "d94f859b85a904730bd69f0a38a775265815ad95166dfc5e951424ef34598aba",
+  "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err_2k.metadata.json",
+  "metadata_sha256": "f765d71e18786d5e42ab1b14cb08520d41d3afb4a300262b8b6db704719218a6",
+  "overflow_or_error_count": 0,
+  "producer": "oracle 56663af (pre-flattening CPU)",
+  "queries": "theseus_gpu/data/validation/ggbs/queries/c4_err_2k.queries",
+  "queries_sha256": "046296e4eee0633a14c6a7c7f90d66311cf91dae1d5b6aca7e44e90d663e2583",
+  "query_count": 2048,
+  "result_count": 2048,
+  "schema_version": 1,
+  "source_json": "external_datasets/GGBS/input_data/JSON/json_files/e_C490_reads_err.json",
+  "source_json_sha256": "70d0266ef4de8e289ad7d0b4d0c1e9e183884b266815cfaafb9f2f0b4f5cf386",
+  "stderr": "",
+  "stdout": "Aligned 2048 sequences in 5199 microseconds\n"
+}

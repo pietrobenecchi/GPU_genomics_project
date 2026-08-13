@@ -16,17 +16,33 @@ from pathlib import Path
 # branch and is not built here.
 THREAD_COUNTS = [64, 128, 256]
 
-# Datasets split by what they demand of the aligner, not by size.
+# Datasets carry two independent labels.
+#
+# `tier` is what the read demands of the aligner:
 #
 #   simple  - every read matches its graph window exactly, so the seed extension
 #             reaches the end of the query at score 0 and the Scope is never used.
 #   complex - reads carry sequencing errors, so the alignment needs at least one
 #             wavefront at a non-zero score. This is the tier that exercises the
-#             fixed capacities in query_state.h, and the tier the current CPU
-#             path cannot finish (see data/validation/repro/README.md).
+#             fixed capacities in query_state.h.
+#
+# `size` is how much work the batch is, for the profiling campaign:
+#
+#   small   - the frozen correctness workloads (256 / 512 queries)
+#   medium  - 1024 queries
+#   large   - 2048 queries, the largest that fits one launch on a 16 GB device
+#             (one QueryState is 4.2 MB, so 2048 of them are 8.6 GB)
+#
+# The medium and large sets are *not* synthetic: they are the same GGBS JSON
+# read the small ones come from, converted with a larger --limit. Since --limit
+# keeps the first N records in file order, each small set is a byte-exact prefix
+# of its medium and large counterparts, and so is its golden. Every one of them
+# has its own frozen CPU golden from the same oracle, so they are full
+# correctness workloads, not performance-only fixtures.
 DATASETS = {
     "ebola_exact_smoke": {
         "tier": "simple",
+        "size": "small",
         "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
         "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_exact_smoke.queries",
         "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_exact_smoke.metadata.json",
@@ -34,6 +50,7 @@ DATASETS = {
     },
     "c4_exact": {
         "tier": "simple",
+        "size": "small",
         "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
         "queries": "theseus_gpu/data/validation/ggbs/queries/c4_exact.queries",
         "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_exact.metadata.json",
@@ -41,6 +58,7 @@ DATASETS = {
     },
     "ebola_error_smoke": {
         "tier": "complex",
+        "size": "small",
         "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
         "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_error_smoke.queries",
         "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_error_smoke.metadata.json",
@@ -48,20 +66,87 @@ DATASETS = {
     },
     "c4_err": {
         "tier": "complex",
+        "size": "small",
         "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
         "queries": "theseus_gpu/data/validation/ggbs/queries/c4_err.queries",
         "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err.metadata.json",
         "golden": "theseus_gpu/data/validation/ggbs/golden/c4_err.cpu.gaf",
     },
+    "c4_exact_1k": {
+        "tier": "simple",
+        "size": "medium",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_exact_1k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_exact_1k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_exact_1k.cpu.gaf",
+    },
+    "c4_err_1k": {
+        "tier": "complex",
+        "size": "medium",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_err_1k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err_1k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_err_1k.cpu.gaf",
+    },
+    "c4_exact_2k": {
+        "tier": "simple",
+        "size": "large",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_exact_2k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_exact_2k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_exact_2k.cpu.gaf",
+    },
+    "c4_err_2k": {
+        "tier": "complex",
+        "size": "large",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/c4_err_2k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err_2k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/c4_err_2k.cpu.gaf",
+    },
+    # Same query count as the c4 large pair, but the ScratchPad window is sized
+    # by the graph's longest vertex: 9 063 on ebola against 52 006 on c4, so the
+    # per-query clear is 5.7x smaller and the phase mix shifts away from it.
+    "ebola_exact_2k": {
+        "tier": "simple",
+        "size": "large",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_exact_2k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_exact_2k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/ebola_exact_2k.cpu.gaf",
+    },
+    "ebola_err_2k": {
+        "tier": "complex",
+        "size": "large",
+        "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",
+        "queries": "theseus_gpu/data/validation/ggbs/queries/ebola_err_2k.queries",
+        "metadata": "theseus_gpu/data/validation/ggbs/truth/ebola_err_2k.metadata.json",
+        "golden": "theseus_gpu/data/validation/ggbs/golden/ebola_err_2k.cpu.gaf",
+    },
 }
 
 TIERS = ("simple", "complex")
+SIZES = ("small", "medium", "large")
 
 
 def datasets_in(suite: str) -> list[str]:
+    """Datasets of one suite.
+
+    A size suite selects on size alone. A tier suite keeps the meaning it has
+    always had -- the four frozen correctness workloads -- so that the two
+    commands in CLAUDE.md still run those four and nothing else; the larger sets
+    are reached through the size suites, which is also what keeps a routine
+    `--suite complex` from demanding the 8.6 GB a 2048-query launch needs.
+    """
     if suite == "all":
         return list(DATASETS)
-    return [name for name, item in DATASETS.items() if item["tier"] == suite]
+    if suite in SIZES:
+        return [name for name, item in DATASETS.items() if item["size"] == suite]
+    return [
+        name
+        for name, item in DATASETS.items()
+        if item["tier"] == suite and item["size"] == "small"
+    ]
 
 
 @dataclass(frozen=True)
@@ -332,7 +417,7 @@ def main(argv: list[str] | None = None) -> int:
         passed: list[str] = []
         for name, graph, queries, golden, metadata in targets:
             if args.suite:
-                print(f"--- {name} ({DATASETS[name]['tier']}) ---")
+                print(f"--- {name} ({DATASETS[name]['tier']}, {DATASETS[name]['size']}) ---")
             dataset_failures = run_dataset(
                 name,
                 graph,
@@ -365,8 +450,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--dataset", choices=sorted(DATASETS))
     parser.add_argument(
         "--suite",
-        choices=(*TIERS, "all"),
-        help="run every dataset in a tier: 'simple' (score 0), 'complex' (needs a non-zero score), or 'all'",
+        choices=(*TIERS, *SIZES, "all"),
+        help="run every dataset in a tier: 'simple' (score 0), 'complex' (needs a "
+             "non-zero score), 'small'/'medium'/'large' (by query count), or 'all'",
     )
     parser.add_argument(
         "--timeout",

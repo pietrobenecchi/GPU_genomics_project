@@ -191,23 +191,45 @@ class GoldenReferenceTests(unittest.TestCase):
 
 
 class SuiteSelectionTests(unittest.TestCase):
-    """Every dataset must land in exactly one tier, and the tiers must mean
-    what the regression relies on: simple = score 0, complex = non-zero score."""
+    """Every dataset carries two labels. `tier` is what the read demands of the
+    aligner (simple = score 0, complex = non-zero score); `size` is how big the
+    batch is. The size suites partition everything; the tier suites deliberately
+    select only the small sets, so `--suite simple` and `--suite complex` still
+    name the four frozen correctness workloads and nothing else."""
 
-    def test_every_dataset_declares_a_known_tier(self):
+    def test_every_dataset_declares_a_known_tier_and_size(self):
         for name, item in regression.DATASETS.items():
             self.assertIn(item.get("tier"), regression.TIERS, msg=name)
+            self.assertIn(item.get("size"), regression.SIZES, msg=name)
 
-    def test_tiers_partition_the_datasets(self):
+    def test_sizes_partition_the_datasets(self):
+        seen = set()
+        for size in regression.SIZES:
+            names = set(regression.datasets_in(size))
+            self.assertEqual(seen & names, set(), msg=size)
+            seen |= names
+        self.assertEqual(seen, set(regression.DATASETS))
+        self.assertEqual(set(regression.datasets_in("all")), set(regression.DATASETS))
+
+    def test_tier_suites_are_the_four_frozen_small_workloads(self):
         simple = set(regression.datasets_in("simple"))
         complex_ = set(regression.datasets_in("complex"))
         self.assertEqual(simple & complex_, set())
-        self.assertEqual(simple | complex_, set(regression.DATASETS))
-        self.assertEqual(set(regression.datasets_in("all")), set(regression.DATASETS))
+        self.assertEqual(simple | complex_, set(regression.datasets_in("small")))
+        self.assertEqual(len(simple | complex_), 4)
 
     def test_error_datasets_are_complex(self):
-        for name in regression.datasets_in("complex"):
-            self.assertTrue(name.endswith(("_err", "_error_smoke")), msg=name)
+        complex_ = {
+            name
+            for name, item in regression.DATASETS.items()
+            if item["tier"] == "complex"
+        }
+        for name in complex_:
+            self.assertTrue(name.endswith(("_err", "_error_smoke", "_err_1k", "_err_2k")),
+                            msg=name)
+        for name, item in regression.DATASETS.items():
+            if "err" in name:
+                self.assertEqual(item["tier"], "complex", msg=name)
 
     def test_suite_and_dataset_are_mutually_exclusive(self):
         with contextlib.redirect_stderr(io.StringIO()):
