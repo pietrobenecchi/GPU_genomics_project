@@ -921,7 +921,34 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
     }
 }
 
-__device__ void process_vertex(QueryState &qs,
+// __noinline__ is the whole optimisation here, and it is worth 88 registers.
+//
+// align_one inlines compute_new_wave, which inlines this, which inlines
+// generate_and_merge_i_candidates, run_sparsify_plan, densify twice and
+// extend_and_consume_m_cells. Those phases are disjoint in time -- each ends on
+// a __syncthreads() before the next begins -- but the compiler sees one body,
+// so the temporaries of one phase stay live across the others and the kernel
+// pays for the union of every phase's live set at once. Cutting the chain here
+// makes the register allocator treat the per-vertex work as its own frame:
+//
+//   ptxas -v, sm_75, theseus_align_batch_kernel
+//     inlined        226 registers, 736 B stack, 0 spill  ->  8 warps/SM, 25 %
+//     __noinline__   138 registers, 768 B stack, 0 spill  -> 14 warps/SM, 43 %
+//
+// This is the "natural" reduction of the live set the brief asks for, and it
+// beats -maxrregcount=168, which buys 12 warps but pays 72 B of spill stores
+// per thread; here the extra cost is 32 bytes of stack frame and one ABI call
+// per active vertex per score, against a body that loops over its wavefront.
+//
+// The cut has to be exactly here. Marking the phases below it instead gives
+// 168-176 registers, and marking them *as well as* this one gives 168-169: the
+// win comes from one frame boundary at the top of the per-vertex work, not
+// from more of them.
+//
+// process_vertex calls __syncthreads(), so every thread of the block must call
+// it -- which it does: compute_new_wave calls it outside any divergent branch,
+// once per active vertex, uniformly across the block.
+__device__ __noinline__ void process_vertex(QueryState &qs,
                                const AlignScoring &scoring,
                                const char *query,
                                int32_t query_len,
