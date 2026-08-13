@@ -38,9 +38,26 @@ TimingReport g_last_timing;
  * One Cell tile, not two: the M cells are no longer staged in shared memory
  * because the thread that extends a cell writes it straight back to bs_m_wf.
  */
+/**
+ * @brief Query characters staged in shared memory per block, at most.
+ *
+ * The query is the one input every M cell of the block reads, and it reads it
+ * from the same few hundred bytes over and over: core_lcp walks query[offset..]
+ * for every cell of every wavefront. Staging it once per block puts those reads
+ * in shared memory instead of going back through L1 each time.
+ *
+ * Bounded rather than sized on the query because it has to fit in shared memory
+ * next to the candidate tile, and a query longer than this simply keeps reading
+ * global memory -- the fallback is the previous behaviour, so nothing depends
+ * on the bound being generous. 1 KB covers the 100 bp reads of every GGBS
+ * dataset with room to spare.
+ */
+constexpr int32_t kQueryTileBytes = 1024;
+
 size_t kernel_shared_bytes(int32_t threads_per_block) {
     return static_cast<size_t>(threads_per_block) *
-           (sizeof(Cell) + 2 * sizeof(int));
+               (sizeof(Cell) + 2 * sizeof(int)) +
+           static_cast<size_t>(kQueryTileBytes);
 }
 
 /**
@@ -1312,6 +1329,7 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
     Cell *shared_i_candidates = reinterpret_cast<Cell *>(smem);
     int *shared_i_valid = reinterpret_cast<int *>(shared_i_candidates + ntx);
     int *shared_m_valid = shared_i_valid + ntx;
+    char *shared_query = reinterpret_cast<char *>(shared_m_valid + ntx);
 
     if (tx == 0) {
         block_continue = 0;
@@ -1329,7 +1347,22 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
 
     const int32_t begin = batch.offsets[query_id];
     const int32_t end = batch.offsets[query_id + 1];
-    align_one(*state, scoring, batch.chars + begin, end - begin, graph,
+
+    // Stage the query in shared memory when it fits, and hand align_one that
+    // pointer instead of the global one. Everything downstream takes the query
+    // as a const char * and only reads it, so the substitution is invisible:
+    // same bytes, same indices, generic addressing does the rest.
+    const int32_t query_len = end - begin;
+    const char *query = batch.chars + begin;
+    if (query_len <= kQueryTileBytes) {
+        for (int32_t i = tx; i < query_len; i += ntx) {
+            shared_query[i] = query[i];
+        }
+        query = shared_query;
+    }
+    __syncthreads();
+
+    align_one(*state, scoring, query, query_len, graph,
               start_node_ids[query_id], start_offsets[query_id],
               results[query_id], block_continue, block_end, block_score,
               shared_num_active, shared_vertex, shared_range_start,
