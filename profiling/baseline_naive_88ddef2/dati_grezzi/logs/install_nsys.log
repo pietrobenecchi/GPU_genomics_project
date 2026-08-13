@@ -1,0 +1,142 @@
+Selecting previously unselected package nsight-systems-2025.6.3.
+(Reading database ... 122403 files and directories currently installed.)
+Preparing to unpack /content/nsys.deb ...
+Unpacking nsight-systems-2025.6.3 (2025.6.3.541-256337736014v0) ...
+dpkg: dependency problems prevent configuration of nsight-systems-2025.6.3:
+ nsight-systems-2025.6.3 depends on libxcb-xinerama0; however:
+  Package libxcb-xinerama0 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-icccm4; however:
+  Package libxcb-icccm4 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-image0; however:
+  Package libxcb-image0 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-keysyms1; however:
+  Package libxcb-keysyms1 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-render-util0; however:
+  Package libxcb-render-util0 is not installed.
+ nsight-systems-2025.6.3 depends on libxkbcommon-x11-0; however:
+  Package libxkbcommon-x11-0 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-xinput0; however:
+  Package libxcb-xinput0 is not installed.
+ nsight-systems-2025.6.3 depends on libxcb-cursor0; however:
+  Package libxcb-cursor0 is not installed.
+ nsight-systems-2025.6.3 depends on libxcomposite1; however:
+  Package libxcomposite1 is not installed.
+ nsight-systems-2025.6.3 depends on libxtst6; however:
+  Package libxtst6 is not installed.
+
+dpkg: error processing package nsight-systems-2025.6.3 (--install):
+ dependency problems - leaving unconfigured
+Processing triggers for mailcap (3.70+nmu1ubuntu1) ...
+Errors were encountered while processing:
+ nsight-systems-2025.6.3
+Reading package lists...
+Building dependency tree...
+Reading state information...
+Correcting dependencies... Done
+The following additional packages will be installed:
+  libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
+  libxcb-render-util0 libxcb-util1 libxcb-xinerama0 libxcb-xinput0 libxcb-xkb1
+  libxcomposite1 libxkbcommon-x11-0 libxtst6
+The following NEW packages will be installed:
+  libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
+  libxcb-render-util0 libxcb-util1 libxcb-xinerama0 libxcb-xinput0 libxcb-xkb1
+  libxcomposite1 libxkbcommon-x11-0 libxtst6
+0 upgraded, 12 newly installed, 0 to remove and 53 not upgraded.
+1 not fully installed or removed.
+Need to get 172 kB of archives.
+After this operation, 784 kB of additional disk space will be used.
+Get:1 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-xinerama0 amd64 1.14-3ubuntu3 [5,414 B]
+Get:2 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-icccm4 amd64 0.4.1-1.1build2 [11.5 kB]
+Get:3 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-util1 amd64 0.4.0-1build2 [11.4 kB]
+Get:4 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-image0 amd64 0.4.0-2 [11.5 kB]
+Get:5 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-keysyms1 amd64 0.4.0-1build3 [8,746 B]
+Get:6 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-render-util0 amd64 0.3.9-1build3 [10.3 kB]
+Get:7 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-xkb1 amd64 1.14-3ubuntu3 [32.8 kB]
+Get:8 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxkbcommon-x11-0 amd64 1.4.0-1 [14.4 kB]
+Get:9 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcb-xinput0 amd64 1.14-3ubuntu3 [34.3 kB]
+Get:10 http://archive.ubuntu.com/ubuntu jammy/universe amd64 libxcb-cursor0 amd64 0.1.1-4ubuntu1 [10.5 kB]
+Get:11 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxcomposite1 amd64 1:0.4.5-1build2 [7,192 B]
+Get:12 http://archive.ubuntu.com/ubuntu jammy/main amd64 libxtst6 amd64 2:1.2.3-1build4 [13.4 kB]
+Fetched 172 kB in 1s (195 kB/s)
+Selecting previously unselected package libxcb-xinerama0:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 126654 files and directories currently installed.)
+Preparing to unpack .../00-libxcb-xinerama0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xinerama0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-icccm4:amd64.
+Preparing to unpack .../01-libxcb-icccm4_0.4.1-1.1build2_amd64.deb ...
+Unpacking libxcb-icccm4:amd64 (0.4.1-1.1build2) ...
+Selecting previously unselected package libxcb-util1:amd64.
+Preparing to unpack .../02-libxcb-util1_0.4.0-1build2_amd64.deb ...
+Unpacking libxcb-util1:amd64 (0.4.0-1build2) ...
+Selecting previously unselected package libxcb-image0:amd64.
+Preparing to unpack .../03-libxcb-image0_0.4.0-2_amd64.deb ...
+Unpacking libxcb-image0:amd64 (0.4.0-2) ...
+Selecting previously unselected package libxcb-keysyms1:amd64.
+Preparing to unpack .../04-libxcb-keysyms1_0.4.0-1build3_amd64.deb ...
+Unpacking libxcb-keysyms1:amd64 (0.4.0-1build3) ...
+Selecting previously unselected package libxcb-render-util0:amd64.
+Preparing to unpack .../05-libxcb-render-util0_0.3.9-1build3_amd64.deb ...
+Unpacking libxcb-render-util0:amd64 (0.3.9-1build3) ...
+Selecting previously unselected package libxcb-xkb1:amd64.
+Preparing to unpack .../06-libxcb-xkb1_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xkb1:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxkbcommon-x11-0:amd64.
+Preparing to unpack .../07-libxkbcommon-x11-0_1.4.0-1_amd64.deb ...
+Unpacking libxkbcommon-x11-0:amd64 (1.4.0-1) ...
+Selecting previously unselected package libxcb-xinput0:amd64.
+Preparing to unpack .../08-libxcb-xinput0_1.14-3ubuntu3_amd64.deb ...
+Unpacking libxcb-xinput0:amd64 (1.14-3ubuntu3) ...
+Selecting previously unselected package libxcb-cursor0:amd64.
+Preparing to unpack .../09-libxcb-cursor0_0.1.1-4ubuntu1_amd64.deb ...
+Unpacking libxcb-cursor0:amd64 (0.1.1-4ubuntu1) ...
+Selecting previously unselected package libxcomposite1:amd64.
+Preparing to unpack .../10-libxcomposite1_1%3a0.4.5-1build2_amd64.deb ...
+Unpacking libxcomposite1:amd64 (1:0.4.5-1build2) ...
+Selecting previously unselected package libxtst6:amd64.
+Preparing to unpack .../11-libxtst6_2%3a1.2.3-1build4_amd64.deb ...
+Unpacking libxtst6:amd64 (2:1.2.3-1build4) ...
+Setting up libxcb-xinput0:amd64 (1.14-3ubuntu3) ...
+Setting up libxtst6:amd64 (2:1.2.3-1build4) ...
+Setting up libxcb-keysyms1:amd64 (0.4.0-1build3) ...
+Setting up libxcb-render-util0:amd64 (0.3.9-1build3) ...
+Setting up libxcb-icccm4:amd64 (0.4.1-1.1build2) ...
+Setting up libxcb-util1:amd64 (0.4.0-1build2) ...
+Setting up libxcb-xkb1:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-image0:amd64 (0.4.0-2) ...
+Setting up libxcb-xinerama0:amd64 (1.14-3ubuntu3) ...
+Setting up libxcb-cursor0:amd64 (0.1.1-4ubuntu1) ...
+Setting up libxkbcommon-x11-0:amd64 (1.4.0-1) ...
+Setting up libxcomposite1:amd64 (1:0.4.5-1build2) ...
+Setting up nsight-systems-2025.6.3 (2025.6.3.541-256337736014v0) ...
+update-alternatives: using /opt/nvidia/nsight-systems/2025.6.3/target-linux-x64/nsys to provide /usr/local/bin/nsys (nsys) in auto mode
+update-alternatives: using /opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/nsys-ui to provide /usr/local/bin/nsys-ui (nsys-ui) in auto mode
+Processing triggers for libc-bin (2.35-0ubuntu3.8) ...
+/sbin/ldconfig.real: /usr/local/lib/libtbb.so.12 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtbbbind_2_5.so.3 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtcm_debug.so.1 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libhwloc.so.15 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libur_loader.so.0 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtbbbind.so.3 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libur_adapter_level_zero.so.0 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtcm.so.1 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtbbmalloc_proxy.so.2 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libur_adapter_level_zero_v2.so.0 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtbbmalloc.so.2 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libur_adapter_opencl.so.0 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libtbbbind_2_0.so.3 is not a symbolic link
+
+/sbin/ldconfig.real: /usr/local/lib/libumf.so.1 is not a symbolic link
+
+/usr/local/bin/nsys

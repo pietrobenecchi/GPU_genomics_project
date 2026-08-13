@@ -1,0 +1,13 @@
+dataset,thread_per_blocco,stall_pipe_load_store,stall_barriera,stall_attesa_memoria_lunga,stall_mio,stall_wait,stall_nessuna_istruzione,settori_per_richiesta_store,settori_per_richiesta_load
+ebola_exact_smoke,64,97.93,25.01,14.6,0.17,2.2,1.59,19.08,1.01
+ebola_exact_smoke,128,72.91,40.96,9.79,0.09,2.26,2.01,19.03,1.0
+ebola_exact_smoke,256,85.34,29.86,4.86,0.03,2.36,4.22,19.01,1.0
+ebola_error_smoke,64,18.84,9.81,3.97,0.07,2.81,2.15,16.31,1.31
+ebola_error_smoke,128,6.56,16.6,1.97,0.03,2.93,3.11,16.27,1.27
+ebola_error_smoke,256,5.21,25.58,0.92,0.02,3.05,3.47,16.25,1.21
+c4_exact,64,234.89,61.16,21.78,0.86,1.59,0.59,23.28,1.02
+c4_exact,128,167.85,88.42,18.92,0.48,1.64,1.47,23.18,1.02
+c4_exact,256,228.01,26.55,8.07,0.01,1.72,6.03,23.15,1.01
+c4_err,64,84.99,26.89,16.24,0.58,2.35,3.93,22.43,1.33
+c4_err,128,48.13,40.3,8.78,0.27,2.53,6.44,22.33,1.28
+c4_err,256,35.08,31.07,2.56,0.02,2.74,6.62,22.31,1.22

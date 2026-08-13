@@ -1,0 +1,9 @@
+==WARNING== Note: Running with unmodified GPU clocks. If not controlled otherwise, profiling results may be inconsistent.
+==PROF== Connected to process 16675 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+==PROF== Profiling "theseus_align_batch_kernel": 0%....50%....100% - 31 passes
+GPU backend: threads/block 64; aligned on device; batch layout verified on device; graph CSR verified on device (14 vertices, 37850 bases, 16 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=4.943872 kernel=6042.730469 d2h=327.616058 total=6375.290527
+GPU timing: h2d 4.94387 ms; kernel 6042.73 ms; d2h 327.616 ms; total 6375.29 ms
+Aligned 256 sequences in 7707418 microseconds on gpu
+==PROF== Disconnected from process 16675
+==PROF== Report: /content/out/raw_boost/ebola_exact_smoke_64_run1.ncu-rep
+NCU_RC_ebola_exact_smoke_64_run1=0

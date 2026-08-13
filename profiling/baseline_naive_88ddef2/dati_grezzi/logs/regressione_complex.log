@@ -1,0 +1,12 @@
+### 2026-08-10T19:41:01+00:00 complex
+--- ebola_error_smoke (complex) ---
+ebola_error_smoke threads 64: PASS (256 queries)
+ebola_error_smoke threads 128: PASS (256 queries)
+ebola_error_smoke threads 256: PASS (256 queries)
+--- c4_err (complex) ---
+c4_err threads 64: PASS (512 queries)
+c4_err threads 128: PASS (512 queries)
+c4_err threads 256: PASS (512 queries)
+
+2/2 datasets passed (ebola_error_smoke, c4_err)
+EXIT_COMPLEX=0

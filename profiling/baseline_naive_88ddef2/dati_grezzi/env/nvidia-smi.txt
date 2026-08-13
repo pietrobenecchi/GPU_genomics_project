@@ -1,0 +1,78 @@
+$ nvidia-smi
+--- rc=0 ---
+Mon Aug 10 19:39:01 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.82.07              Driver Version: 580.82.07      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla T4                       Off |   00000000:00:04.0 Off |                    0 |
+| N/A   42C    P8             10W /   70W |       0MiB /  15360MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+
+
+$ nvidia-smi -q -d CLOCK
+--- rc=0 ---
+
+==============NVSMI LOG==============
+
+Timestamp                                 : Mon Aug 10 19:39:01 2026
+Driver Version                            : 580.82.07
+CUDA Version                              : 13.0
+
+Attached GPUs                             : 1
+GPU 00000000:00:04.0
+    Clocks
+        Graphics                          : 300 MHz
+        SM                                : 300 MHz
+        Memory                            : 405 MHz
+        Video                             : 540 MHz
+    Applications Clocks
+        Graphics                          : 585 MHz
+        Memory                            : 5001 MHz
+    Default Applications Clocks
+        Graphics                          : 585 MHz
+        Memory                            : 5001 MHz
+    Deferred Clocks
+        Memory                            : N/A
+    Max Clocks
+        Graphics                          : 1590 MHz
+        SM                                : 1590 MHz
+        Memory                            : 5001 MHz
+        Video                             : 1470 MHz
+    Max Customer Boost Clocks
+        Graphics                          : 1590 MHz
+    SM Clock Samples
+        Duration                          : Not Found
+        Number of Samples                 : Not Found
+        Max                               : Not Found
+        Min                               : Not Found
+        Avg                               : Not Found
+    Memory Clock Samples
+        Duration                          : Not Found
+        Number of Samples                 : Not Found
+        Max                               : Not Found
+        Min                               : Not Found
+        Avg                               : Not Found
+    Clock Policy
+        Auto Boost                        : N/A
+        Auto Boost Default                : N/A
+
+
+
+$ nvidia-smi --query-gpu=name,driver_version,memory.total,clocks.max.sm,clocks.max.mem,clocks.current.sm,clocks.current.mem,persistence_mode,compute_mode --format=csv
+--- rc=2 ---
+Field "clocks.current.mem" is not a valid field to query.
+
+

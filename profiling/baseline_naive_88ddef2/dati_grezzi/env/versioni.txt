@@ -1,0 +1,101 @@
+$ which nvcc; nvcc --version
+--- rc=0 ---
+/usr/local/cuda/bin/nvcc
+nvcc: NVIDIA (R) Cuda compiler driver
+Copyright (c) 2005-2025 NVIDIA Corporation
+Built on Fri_Feb_21_20:23:50_PST_2025
+Cuda compilation tools, release 12.8, V12.8.93
+Build cuda_12.8.r12.8/compiler.35583870_0
+
+
+$ which ncu ncu-ui 2>/dev/null; ncu --version 2>&1 | head -20
+--- rc=0 ---
+/usr/local/cuda/bin/ncu
+/usr/local/cuda/bin/ncu-ui
+NVIDIA (R) Nsight Compute Command Line Profiler
+Copyright (c) 2018-2025 NVIDIA Corporation
+Version 2025.1.1.0 (build 35528883) (public-release)
+
+
+$ ls /usr/local/cuda*/bin/ 2>/dev/null | head -40; ls /opt/nvidia/nsight-compute 2>/dev/null
+--- rc=0 ---
+/usr/local/cuda-12.8/bin/:
+bin2c
+compute-sanitizer
+crt
+cudafe++
+cuda-gdb
+cuda-gdb-minimal
+cuda-gdb-python3.10-tui
+cuda-gdb-python3.11-tui
+cuda-gdb-python3.12-tui
+cuda-gdb-python3.8-tui
+cuda-gdb-python3.9-tui
+cuda-gdbserver
+cu++filt
+cuobjdump
+fatbinary
+ncu
+ncu-ui
+nvcc
+__nvcc_device_query
+nvcc.profile
+nvdisasm
+nvlink
+nvprof
+nvprune
+ptxas
+
+/usr/local/cuda-12/bin/:
+bin2c
+compute-sanitizer
+crt
+cudafe++
+cuda-gdb
+cuda-gdb-minimal
+cuda-gdb-python3.10-tui
+cuda-gdb-python3.11-tui
+cuda-gdb-python3.12-tui
+cuda-gdb-python3.8-tui
+cuda-gdb-python3.9-tui
+cuda-gdbserver
+2025.1.1
+
+
+$ cmake --version
+--- rc=0 ---
+cmake version 3.31.10
+
+CMake suite maintained and supported by Kitware (kitware.com/cmake).
+
+
+$ gcc --version
+--- rc=0 ---
+gcc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0
+Copyright (C) 2021 Free Software Foundation, Inc.
+This is free software; see the source for copying conditions.  There is NO
+warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+
+
+
+$ python3 --version
+--- rc=0 ---
+Python 3.12.13
+
+
+$ uname -a; cat /etc/os-release
+--- rc=0 ---
+Linux 83112187db3d 6.6.122+ #1 SMP Thu Apr 30 18:17:14 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+VERSION="22.04.5 LTS (Jammy Jellyfish)"
+VERSION_CODENAME=jammy
+ID=ubuntu
+ID_LIKE=debian
+HOME_URL="https://www.ubuntu.com/"
+SUPPORT_URL="https://help.ubuntu.com/"
+BUG_REPORT_URL="https://bugs.launchpad.net/ubuntu/"
+PRIVACY_POLICY_URL="https://www.ubuntu.com/legal/terms-and-policies/privacy-policy"
+UBUNTU_CODENAME=jammy
+

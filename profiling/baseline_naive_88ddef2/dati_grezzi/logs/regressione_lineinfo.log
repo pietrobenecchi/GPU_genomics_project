@@ -1,0 +1,19 @@
+--- ebola_exact_smoke (simple) ---
+ebola_exact_smoke threads 64: PASS (256 queries)
+ebola_exact_smoke threads 128: PASS (256 queries)
+ebola_exact_smoke threads 256: PASS (256 queries)
+--- c4_exact (simple) ---
+c4_exact threads 64: PASS (512 queries)
+c4_exact threads 128: PASS (512 queries)
+c4_exact threads 256: PASS (512 queries)
+--- ebola_error_smoke (complex) ---
+ebola_error_smoke threads 64: PASS (256 queries)
+ebola_error_smoke threads 128: PASS (256 queries)
+ebola_error_smoke threads 256: PASS (256 queries)
+--- c4_err (complex) ---
+c4_err threads 64: PASS (512 queries)
+c4_err threads 128: PASS (512 queries)
+c4_err threads 256: PASS (512 queries)
+
+4/4 datasets passed (ebola_exact_smoke, c4_exact, ebola_error_smoke, c4_err)
+EXIT_REGR_LINEINFO=0

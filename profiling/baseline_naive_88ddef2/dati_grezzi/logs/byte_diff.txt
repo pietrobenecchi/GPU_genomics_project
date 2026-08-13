@@ -1,0 +1,12 @@
+ebola_exact_smoke      64  IDENTICAL  sha256=0301bb6308be749c  golden=0301bb6308be749c
+ebola_exact_smoke     128  IDENTICAL  sha256=0301bb6308be749c  golden=0301bb6308be749c
+ebola_exact_smoke     256  IDENTICAL  sha256=0301bb6308be749c  golden=0301bb6308be749c
+c4_exact               64  IDENTICAL  sha256=88166d3ed9242460  golden=88166d3ed9242460
+c4_exact              128  IDENTICAL  sha256=88166d3ed9242460  golden=88166d3ed9242460
+c4_exact              256  IDENTICAL  sha256=88166d3ed9242460  golden=88166d3ed9242460
+ebola_error_smoke      64  IDENTICAL  sha256=dd6af6a27147aad6  golden=dd6af6a27147aad6
+ebola_error_smoke     128  IDENTICAL  sha256=dd6af6a27147aad6  golden=dd6af6a27147aad6
+ebola_error_smoke     256  IDENTICAL  sha256=dd6af6a27147aad6  golden=dd6af6a27147aad6
+c4_err                 64  IDENTICAL  sha256=7eb1cf240dcc6809  golden=7eb1cf240dcc6809
+c4_err                128  IDENTICAL  sha256=7eb1cf240dcc6809  golden=7eb1cf240dcc6809
+c4_err                256  IDENTICAL  sha256=7eb1cf240dcc6809  golden=7eb1cf240dcc6809

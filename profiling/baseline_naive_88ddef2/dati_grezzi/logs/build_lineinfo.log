@@ -1,0 +1,37 @@
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- The CUDA compiler identification is NVIDIA 12.8.93 with host compiler GNU 11.4.0
+-- Detecting CUDA compiler ABI info
+-- Detecting CUDA compiler ABI info - done
+-- Check for working CUDA compiler: /usr/local/cuda/bin/nvcc - skipped
+-- Detecting CUDA compile features
+-- Detecting CUDA compile features - done
+-- theseus_proxy: CUDA backend ON, architectures: 75
+-- Configuring done (3.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /content/theseus/theseus_gpu/build-gpu-lineinfo
+[ 12%] Building CXX object CMakeFiles/theseus_proxy.dir/src/alignment.cpp.o
+[ 18%] Building CXX object CMakeFiles/theseus_proxy.dir/src/graph.cpp.o
+[ 25%] Building CXX object CMakeFiles/theseus_proxy.dir/src/gfa_graph.cpp.o
+[ 18%] Building CXX object CMakeFiles/theseus_proxy.dir/src/penalties.cpp.o
+[ 31%] Building CXX object CMakeFiles/theseus_proxy.dir/src/scope.cpp.o
+[ 37%] Building CXX object CMakeFiles/theseus_proxy.dir/src/theseus_aligner.cpp.o
+[ 43%] Building CXX object CMakeFiles/theseus_proxy.dir/src/theseus_aligner_impl.cpp.o
+[ 50%] Building CXX object CMakeFiles/theseus_proxy.dir/src/gpu/graph_csr.cpp.o
+[ 56%] Building CUDA object CMakeFiles/theseus_proxy.dir/src/gpu/align_gpu.cu.o
+[ 62%] Linking CXX static library libtheseus_proxy.a
+[ 62%] Built target theseus_proxy
+[ 75%] Building CXX object CMakeFiles/seq2graph_gpu_validate.dir/apps/seq2graph_gpu_validate.cpp.o
+[ 75%] Building CXX object CMakeFiles/seq2graph_gpu_benchmark.dir/apps/seq2graph_gpu_benchmark.cpp.o
+[ 81%] Building CXX object CMakeFiles/seq2graph_proxy.dir/apps/seq2graph_proxy.cpp.o
+[ 87%] Linking CXX executable apps/seq2graph_gpu_benchmark
+[ 87%] Built target seq2graph_gpu_benchmark
+[ 93%] Linking CXX executable apps/seq2graph_gpu_validate
+[ 93%] Built target seq2graph_gpu_validate
+[100%] Linking CXX executable apps/seq2graph_proxy
+[100%] Built target seq2graph_proxy
+BUILD_LINEINFO_RC=0

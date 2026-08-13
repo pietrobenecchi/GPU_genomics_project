@@ -1,0 +1,18 @@
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (14 vertices, 37850 bases, 16 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=4.947680 kernel=1.439872 d2h=239.159973 total=245.547516
+GPU timing: h2d 4.94768 ms; kernel 1.43987 ms; d2h 239.16 ms; total 245.548 ms
+Aligned 256 sequences in 1422263 microseconds on gpu
+Collecting data...
+Generating '/tmp/nsys-report-449a.qdstrm'
+[1/1] [0%                          ] ebola_error_smoke_128.nsys-rep[1/1] [0%                          ] ebola_error_smoke_128.nsys-rep[1/1] [===22%                      ] ebola_error_smoke_128.nsys-rep[1/1] [===24%                      ] ebola_error_smoke_128.nsys-rep[1/1] [====25%                     ] ebola_error_smoke_128.nsys-rep[1/1] [====26%                     ] ebola_error_smoke_128.nsys-rep[1/1] [====27%                     ] ebola_error_smoke_128.nsys-rep[1/1] [=====30%                    ] ebola_error_smoke_128.nsys-rep[1/1] [======33%                   ] ebola_error_smoke_128.nsys-rep[1/1] [==========49%               ] ebola_error_smoke_128.nsys-rep[1/1] [=================72%        ] ebola_error_smoke_128.nsys-rep[1/1] [========================100%] ebola_error_smoke_128.nsys-rep[1/1] [========================100%] ebola_error_smoke_128.nsys-rep
+Generated:
+	/content/out/nsys/ebola_error_smoke_128.nsys-rep
+NSYS_RC_ebola_error_smoke=0
+Generating SQLite file /content/out/nsys/ebola_error_smoke_128.sqlite from /content/out/nsys/ebola_error_smoke_128.nsys-rep
+Processing [/content/out/nsys/ebola_error_smoke_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_api_sum.py] to [/content/out/nsys/ebola_error_smoke_128_cuda_api_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/ebola_error_smoke_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/content/out/nsys/ebola_error_smoke_128_cuda_gpu_kern_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/ebola_error_smoke_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_mem_time_sum.py] to [/content/out/nsys/ebola_error_smoke_128_cuda_gpu_mem_time_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/ebola_error_smoke_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_mem_size_sum.py] to [/content/out/nsys/ebola_error_smoke_128_cuda_gpu_mem_size_sum.csv]... PROCESSED
+

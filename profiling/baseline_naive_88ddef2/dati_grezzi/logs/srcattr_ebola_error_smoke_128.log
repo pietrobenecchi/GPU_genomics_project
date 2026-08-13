@@ -1,0 +1,9 @@
+==PROF== Connected to process 14013 (/content/theseus/theseus_gpu/build-gpu-lineinfo/apps/seq2graph_proxy)
+==PROF== Profiling "theseus_align_batch_kernel": 0%....50%....100% - 31 passes
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (14 vertices, 37850 bases, 16 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=4.927488 kernel=9520.944336 d2h=277.762238 total=9803.633789
+GPU timing: h2d 4.92749 ms; kernel 9520.94 ms; d2h 277.762 ms; total 9803.63 ms
+Aligned 256 sequences in 11054536 microseconds on gpu
+==PROF== Disconnected from process 14013
+==PROF== Report: /content/out/srcattr/ebola_error_smoke_128.ncu-rep
+NCU_SRC_RC_ebola_error_smoke_128=0
+EXPORT_SRC_RC_ebola_error_smoke_128=1

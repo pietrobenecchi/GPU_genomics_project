@@ -1,0 +1,9 @@
+==PROF== Connected to process 14151 (/content/theseus/theseus_gpu/build-gpu-lineinfo/apps/seq2graph_proxy)
+==PROF== Profiling "theseus_align_batch_kernel": 0%....50%....100% - 31 passes
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.725632 kernel=9779.552734 d2h=549.529358 total=10338.807617
+GPU timing: h2d 9.72563 ms; kernel 9779.55 ms; d2h 549.529 ms; total 10338.8 ms
+Aligned 512 sequences in 12460237 microseconds on gpu
+==PROF== Disconnected from process 14151
+==PROF== Report: /content/out/srcattr/c4_err_128.ncu-rep
+NCU_SRC_RC_c4_err_128=0
+EXPORT_SRC_RC_c4_err_128=1

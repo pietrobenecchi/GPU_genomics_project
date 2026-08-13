@@ -1,0 +1,82 @@
+$ nvidia-smi -q -d CLOCK | head -12
+--- rc=0 wall=0.03s ---
+
+==============NVSMI LOG==============
+
+Timestamp                                 : Mon Aug 10 19:48:14 2026
+Driver Version                            : 580.82.07
+CUDA Version                              : 13.0
+
+Attached GPUs                             : 1
+GPU 00000000:00:04.0
+    Clocks
+        Graphics                          : 1590 MHz
+        SM                                : 1590 MHz
+
+--- stderr ---
+
+
+$ ncu --kernel-name theseus_align_batch_kernel --launch-count 1 --metrics gpu__time_duration.sum --csv /content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy --backend gpu --require-gpu-result --gpu-threads 128 -g /content/theseus/theseus_gpu/data/validation/ggbs/graphs/ebola.gfa -s /content/theseus/theseus_gpu/data/validation/ggbs/queries/ebola_exact_smoke.queries -f /tmp/sz_ebola_exact_smoke_128.gaf
+--- rc=0 wall=3.84s ---
+==PROF== Connected to process 6812 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+Aligned 256 sequences in 2082506 microseconds on gpu
+==PROF== Disconnected from process 6812
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","6812","seq2graph_proxy","127.0.0.1","unnamed>::theseus_align_batch_kernel(BatchView, GraphCsrView, const int *, const int *, AlignScoring, QueryState *, AlignResult *)","1","7","(128, 1, 1)","(256, 1, 1)","0","7.5","Command line profiler metrics","gpu__time_duration.sum","ns","646,496"
+
+--- stderr ---
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (14 vertices, 37850 bases, 16 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=4.984832 kernel=460.279480 d2h=280.098816 total=745.363159
+GPU timing: h2d 4.98483 ms; kernel 460.279 ms; d2h 280.099 ms; total 745.363 ms
+
+
+$ ncu --kernel-name theseus_align_batch_kernel --launch-count 1 --metrics gpu__time_duration.sum --csv /content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy --backend gpu --require-gpu-result --gpu-threads 128 -g /content/theseus/theseus_gpu/data/validation/ggbs/graphs/c4.gfa -s /content/theseus/theseus_gpu/data/validation/ggbs/queries/c4_exact.queries -f /tmp/sz_c4_exact_128.gaf
+--- rc=0 wall=4.20s ---
+==PROF== Connected to process 6860 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+Aligned 512 sequences in 3236383 microseconds on gpu
+==PROF== Disconnected from process 6860
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","6860","seq2graph_proxy","127.0.0.1","unnamed>::theseus_align_batch_kernel(BatchView, GraphCsrView, const int *, const int *, AlignScoring, QueryState *, AlignResult *)","1","7","(128, 1, 1)","(512, 1, 1)","0","7.5","Command line profiler metrics","gpu__time_duration.sum","ns","5,788,960"
+
+--- stderr ---
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.813376 kernel=485.559998 d2h=549.648254 total=1045.021606
+GPU timing: h2d 9.81338 ms; kernel 485.56 ms; d2h 549.648 ms; total 1045.02 ms
+
+
+$ ncu --kernel-name theseus_align_batch_kernel --launch-count 1 --metrics gpu__time_duration.sum --csv /content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy --backend gpu --require-gpu-result --gpu-threads 128 -g /content/theseus/theseus_gpu/data/validation/ggbs/graphs/ebola.gfa -s /content/theseus/theseus_gpu/data/validation/ggbs/queries/ebola_error_smoke.queries -f /tmp/sz_ebola_error_smoke_128.gaf
+--- rc=0 wall=2.97s ---
+==PROF== Connected to process 6911 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+Aligned 256 sequences in 2006231 microseconds on gpu
+==PROF== Disconnected from process 6911
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","6911","seq2graph_proxy","127.0.0.1","unnamed>::theseus_align_batch_kernel(BatchView, GraphCsrView, const int *, const int *, AlignScoring, QueryState *, AlignResult *)","1","7","(128, 1, 1)","(256, 1, 1)","0","7.5","Command line profiler metrics","gpu__time_duration.sum","ns","2,329,632"
+
+--- stderr ---
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (14 vertices, 37850 bases, 16 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=4.966624 kernel=465.109375 d2h=282.706451 total=752.782471
+GPU timing: h2d 4.96662 ms; kernel 465.109 ms; d2h 282.706 ms; total 752.782 ms
+
+
+$ ncu --kernel-name theseus_align_batch_kernel --launch-count 1 --metrics gpu__time_duration.sum --csv /content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy --backend gpu --require-gpu-result --gpu-threads 128 -g /content/theseus/theseus_gpu/data/validation/ggbs/graphs/c4.gfa -s /content/theseus/theseus_gpu/data/validation/ggbs/queries/c4_err.queries -f /tmp/sz_c4_err_128.gaf
+--- rc=0 wall=4.61s ---
+==PROF== Connected to process 6955 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+Aligned 512 sequences in 3538320 microseconds on gpu
+==PROF== Disconnected from process 6955
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","6955","seq2graph_proxy","127.0.0.1","unnamed>::theseus_align_batch_kernel(BatchView, GraphCsrView, const int *, const int *, AlignScoring, QueryState *, AlignResult *)","1","7","(128, 1, 1)","(512, 1, 1)","0","7.5","Command line profiler metrics","gpu__time_duration.sum","ns","6,723,488"
+
+--- stderr ---
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.798880 kernel=542.504822 d2h=620.456177 total=1172.759888
+GPU timing: h2d 9.79888 ms; kernel 542.505 ms; d2h 620.456 ms; total 1172.76 ms
+
+
+$ ncu --set full --kernel-name theseus_align_batch_kernel --launch-count 1 -f -o /tmp/sizing_c4err_128 /content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy --backend gpu --require-gpu-result --gpu-threads 128 -g /content/theseus/theseus_gpu/data/validation/ggbs/graphs/c4.gfa -s /content/theseus/theseus_gpu/data/validation/ggbs/queries/c4_err.queries -f /tmp/sz_c4_err_128.gaf
+--- rc=0 wall=14.58s ---
+==PROF== Connected to process 7007 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+==PROF== Profiling "theseus_align_batch_kernel": 0%....50%....100% - 31 passes
+Aligned 512 sequences in 12815665 microseconds on gpu
+==PROF== Disconnected from process 7007
+==PROF== Report: /tmp/sizing_c4err_128.ncu-rep
+
+--- stderr ---
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.795584 kernel=10114.609375 d2h=554.653992 total=10679.058594
+GPU timing: h2d 9.79558 ms; kernel 10114.6 ms; d2h 554.654 ms; total 10679.1 ms
+

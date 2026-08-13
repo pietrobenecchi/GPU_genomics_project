@@ -1,0 +1,9 @@
+==WARNING== Note: Running with unmodified GPU clocks. If not controlled otherwise, profiling results may be inconsistent.
+==PROF== Connected to process 18065 (/content/theseus/theseus_gpu/build-gpu/apps/seq2graph_proxy)
+==PROF== Profiling "theseus_align_batch_kernel": 0%....50%....100% - 31 passes
+GPU backend: threads/block 64; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.723072 kernel=5977.369629 d2h=548.980469 total=6536.072754
+GPU timing: h2d 9.72307 ms; kernel 5977.37 ms; d2h 548.98 ms; total 6536.07 ms
+Aligned 512 sequences in 8660148 microseconds on gpu
+==PROF== Disconnected from process 18065
+==PROF== Report: /content/out/raw_boost/c4_exact_64_run2.ncu-rep
+NCU_RC_c4_exact_64_run2=0

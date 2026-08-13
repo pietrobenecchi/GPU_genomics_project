@@ -1,0 +1,5 @@
+dataset_a_128_thread,settori_L2_totali_MB,settori_L2_ideali_MB,riga_1072_settori_MB,riga_1072_ideali_MB,riga_1072_%_del_totale,previsione_analitica_MB
+ebola_exact_smoke,178.3,63.5,171.1,56.3,95.98,56.3
+ebola_error_smoke,199.9,80.1,171.1,56.3,85.58,56.3
+c4_exact,1960.2,654.8,1945.9,640.5,99.27,640.29
+c4_err,2003.3,687.5,1945.9,640.5,97.13,640.29

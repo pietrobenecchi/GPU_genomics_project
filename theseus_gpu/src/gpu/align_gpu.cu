@@ -786,6 +786,53 @@ __device__ void generate_and_merge_i_candidates(
     __syncthreads();
 }
 
+/**
+ * @brief core_lcp with a warp on one cell instead of a thread on one cell.
+ *
+ * The serial version walks the match one character at a time. Here the 32 lanes
+ * compare 32 characters at once, a ballot turns that into a mask, and the
+ * number of *leading* set bits is how far the match runs: the first zero is the
+ * first mismatch, so __ffs on the complement gives the advance directly. The
+ * loop repeats while a whole chunk matched.
+ *
+ * It returns exactly what core_lcp returns -- the same offset and the same j --
+ * because the advance is the length of the leading run of matches, never a
+ * count of matching lanes: a mismatch at lane k stops it at k whatever lanes
+ * k+1.. say. Endpoint, ordering, jump behaviour and tie-breaking are decided by
+ * the caller from those two values and are untouched.
+ *
+ * Every lane of the warp must call it, with the same cell, and offset/j must be
+ * uniform across the warp on entry: it contains __ballot_sync.
+ */
+__device__ inline void warp_lcp(const char *query, int32_t query_len,
+                                const GraphCsrView &graph, int32_t v,
+                                int32_t &offset, int32_t &j) {
+    const int32_t n = vertex_len(graph, v);
+    const int32_t lane = static_cast<int32_t>(threadIdx.x) & 31;
+    for (;;) {
+        const int32_t room_q = query_len - offset;
+        const int32_t room_v = n - j;
+        const int32_t remaining = room_q < room_v ? room_q : room_v;
+        if (remaining <= 0) {
+            return;
+        }
+        const int32_t chunk = remaining < 32 ? remaining : 32;
+        const bool match = lane < chunk &&
+                           query[offset + lane] == vertex_char(graph, v, j + lane);
+        const unsigned int matches = __ballot_sync(0xFFFFFFFFu, match);
+        const unsigned int wanted =
+            chunk == 32 ? 0xFFFFFFFFu : ((1u << chunk) - 1u);
+        const unsigned int mismatches = (~matches) & wanted;
+        const int32_t advance =
+            mismatches != 0u ? (__ffs(static_cast<int>(mismatches)) - 1) : chunk;
+        offset += advance;
+        j += advance;
+        if (advance < chunk) {
+            return;
+        }
+    }
+}
+
 __device__ void extend_and_consume_m_cells(QueryState &qs,
                                            const char *query,
                                            int32_t query_len,
@@ -799,35 +846,47 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
     const int32_t tx = static_cast<int32_t>(threadIdx.x);
     const int32_t ntx = static_cast<int32_t>(blockDim.x);
 
+    // One warp per cell rather than one thread per cell: the tile is nwarps
+    // wide instead of ntx wide, and the 32 lanes of a warp share the LCP of a
+    // single cell. Both `active` and the cell are uniform across a warp, so the
+    // warp never diverges around the ballot inside warp_lcp.
+    const int32_t lane = tx & 31;
+    const int32_t warp_id = tx >> 5;
+    const int32_t nwarps = ntx >> 5;
+
     for (int64_t chunk_start = range_start; chunk_start < range_end;
-         chunk_start += ntx) {
-        const int64_t idx = chunk_start + tx;
+         chunk_start += nwarps) {
+        const int64_t idx = chunk_start + warp_id;
         if (idx < range_end) {
             Cell cell = qs.bs_m_wf[idx];
             int32_t j = cell.diag + cell.offset;
-            core_lcp(query, query_len, graph, cell.vertex_id, cell.offset, j);
-            // The extending thread writes its own cell back. The serial loop
-            // below used to do it lane by lane, so a cell was visible in
-            // bs_m_wf only once the loop reached it; writing the whole tile up
-            // front is invisible because nothing that loop calls reads
-            // bs_m_wf. core_store_m_jump and the core_extend_diagonal
+            warp_lcp(query, query_len, graph, cell.vertex_id, cell.offset, j);
+            // The extending warp writes its own cell back, from lane 0. The
+            // serial loop below used to do it lane by lane, so a cell was
+            // visible in bs_m_wf only once the loop reached it; writing the
+            // whole tile up front is invisible because nothing that loop calls
+            // reads bs_m_wf. core_store_m_jump and the core_extend_diagonal
             // recursion under it push into bs_m_jumps_wf and bs_i_jumps_wf
             // only, and each iteration reads just the cell it is on.
-            qs.bs_m_wf[idx] = cell;
-            shared_m_valid[tx] = 1;
-        } else {
-            shared_m_valid[tx] = 0;
+            if (lane == 0) {
+                qs.bs_m_wf[idx] = cell;
+                shared_m_valid[warp_id] = 1;
+            }
+        } else if (lane == 0) {
+            shared_m_valid[warp_id] = 0;
         }
         __syncthreads();
 
         if (tx == 0) {
             bool end = block_end != 0;
             Cell end_cell = block_end_cell;
-            for (int32_t lane = 0; lane < ntx; ++lane) {
-                if (shared_m_valid[lane] == 0) {
+            // Same cells in the same index order as before, so the serial pass
+            // sees exactly the sequence it used to.
+            for (int32_t w = 0; w < nwarps; ++w) {
+                if (shared_m_valid[w] == 0) {
                     continue;
                 }
-                const int64_t cell_idx = chunk_start + lane;
+                const int64_t cell_idx = chunk_start + w;
                 Cell &cell = qs.bs_m_wf[cell_idx];
                 core_check_end(cell, query_len, end, end_cell);
                 const int32_t j = cell.diag + cell.offset;

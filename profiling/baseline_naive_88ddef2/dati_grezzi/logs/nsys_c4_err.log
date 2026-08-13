@@ -1,0 +1,18 @@
+GPU backend: threads/block 128; aligned on device; batch layout verified on device; graph CSR verified on device (32 vertices, 329664 bases, 44 edges); align kernel result verified against CPU; GAF reconstructed from GPU QueryState with host backtrace; timing_ms h2d=9.848288 kernel=6.429024 d2h=486.326385 total=502.603699
+GPU timing: h2d 9.84829 ms; kernel 6.42902 ms; d2h 486.326 ms; total 502.604 ms
+Aligned 512 sequences in 2478586 microseconds on gpu
+Collecting data...
+Generating '/tmp/nsys-report-24d7.qdstrm'
+[1/1] [0%                          ] c4_err_128.nsys-rep[1/1] [0%                          ] c4_err_128.nsys-rep[1/1] [7%                          ] c4_err_128.nsys-rep[1/1] [8%                          ] c4_err_128.nsys-rep[1/1] [====28%                     ] c4_err_128.nsys-rep[1/1] [=====29%                    ] c4_err_128.nsys-rep[1/1] [=====30%                    ] c4_err_128.nsys-rep[1/1] [======33%                   ] c4_err_128.nsys-rep[1/1] [======35%                   ] c4_err_128.nsys-rep[1/1] [===========51%              ] c4_err_128.nsys-rep[1/1] [================71%         ] c4_err_128.nsys-rep[1/1] [==================75%       ] c4_err_128.nsys-rep[1/1] [========================100%] c4_err_128.nsys-rep[1/1] [========================100%] c4_err_128.nsys-rep
+Generated:
+	/content/out/nsys/c4_err_128.nsys-rep
+NSYS_RC_c4_err=0
+Generating SQLite file /content/out/nsys/c4_err_128.sqlite from /content/out/nsys/c4_err_128.nsys-rep
+Processing [/content/out/nsys/c4_err_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_api_sum.py] to [/content/out/nsys/c4_err_128_cuda_api_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/c4_err_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/content/out/nsys/c4_err_128_cuda_gpu_kern_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/c4_err_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_mem_time_sum.py] to [/content/out/nsys/c4_err_128_cuda_gpu_mem_time_sum.csv]... PROCESSED
+
+Processing [/content/out/nsys/c4_err_128.sqlite] with [/opt/nvidia/nsight-systems/2025.6.3/host-linux-x64/reports/cuda_gpu_mem_size_sum.py] to [/content/out/nsys/c4_err_128_cuda_gpu_mem_size_sum.csv]... PROCESSED
+

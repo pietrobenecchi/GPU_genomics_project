@@ -1,0 +1,49 @@
+Persistence mode is already Enabled for GPU 00000000:00:04.0.
+All done.
+GPU clocks set to "(gpuClkMin 1590, gpuClkMax 1590)" for GPU 00000000:00:04.0
+All done.
+
+==============NVSMI LOG==============
+
+Timestamp                                 : Mon Aug 10 19:50:47 2026
+Driver Version                            : 580.82.07
+CUDA Version                              : 13.0
+
+Attached GPUs                             : 1
+GPU 00000000:00:04.0
+    Clocks
+        Graphics                          : 1590 MHz
+        SM                                : 1590 MHz
+        Memory                            : 5000 MHz
+        Video                             : 1470 MHz
+    Applications Clocks
+        Graphics                          : 585 MHz
+        Memory                            : 5001 MHz
+    Default Applications Clocks
+        Graphics                          : 585 MHz
+        Memory                            : 5001 MHz
+    Deferred Clocks
+        Memory                            : N/A
+    Max Clocks
+        Graphics                          : 1590 MHz
+        SM                                : 1590 MHz
+        Memory                            : 5001 MHz
+        Video                             : 1470 MHz
+    Max Customer Boost Clocks
+        Graphics                          : 1590 MHz
+    SM Clock Samples
+        Duration                          : Not Found
+        Number of Samples                 : Not Found
+        Max                               : Not Found
+        Min                               : Not Found
+        Avg                               : Not Found
+    Memory Clock Samples
+        Duration                          : Not Found
+        Number of Samples                 : Not Found
+        Max                               : Not Found
+        Min                               : Not Found
+        Avg                               : Not Found
+    Clock Policy
+        Auto Boost                        : N/A
+        Auto Boost Default                : N/A
+
