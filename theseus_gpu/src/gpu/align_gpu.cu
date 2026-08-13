@@ -1715,16 +1715,39 @@ Status align_batch(const BatchView &batch,
         ALLOC_GROWN(grown_start_offsets, per_query_i32_bytes, "cudaMalloc(start_offsets)");
         ALLOC_GROWN(grown_results, results_bytes, "cudaMalloc(results)");
         ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
-        // cudaMalloc does not zero, and sp_cleared has to read as 0 -- "no
-        // entry of sp_off has been cleared yet" -- on a state's first use, or
-        // the first query would skip a clear it still needs. One strided memset
-        // of one int per state, 8 KB for 2048 of them, done once per allocation
-        // rather than once per batch.
-        err = cudaMemset2D(&grown_states[0].sp_cleared, sizeof(QueryState), 0,
-                           sizeof(int32_t),
-                           static_cast<size_t>(batch.num_seqs));
+        // cudaMalloc does not zero, and two things need it to be zero.
+        //
+        // sp_cleared has to read as 0 -- "no entry of sp_off has been cleared
+        // yet" -- on a state's first use, or the first query would skip a clear
+        // it still needs.
+        //
+        // And the argument that nothing else needs zeroing turned out to be
+        // wrong. The commit that dropped the per-batch cudaMemset said it was
+        // "an argument, not a proof, so it is checked rather than trusted";
+        // checking it says no: on ebola_exact_smoke, 8 queries, initcheck
+        // reports 73 758 reads of uninitialised device memory, all of them the
+        // same site once deduplicated --
+        //
+        //     core_check_end            align_core.h:39
+        //     core_extend_diagonal      align_core.h:281
+        //     align_one                 align_gpu.cu:1149   the score-0 seed
+        //
+        // -- and every commit after it inherits them, while the commit before
+        // it is clean. The reads have never changed a result: all ten datasets
+        // match their golden byte for byte at 64, 128 and 256 threads. But a
+        // value read out of memory nobody wrote is whatever the last tenant of
+        // that DRAM left, so "it matched" is a property of one run, not of the
+        // program.
+        //
+        // Zeroing here rather than per batch keeps what that commit was after.
+        // The cost it removed was 4.4 MB per query on *every* batch -- 8.6 GB
+        // for 2048 queries, 40.8 ms against a 4.7 ms kernel; this pays it once
+        // per allocation, and the workspace is allocated once per process and
+        // grown only when a batch needs more states than the last one. It also
+        // subsumes the strided memset of sp_cleared that used to be here.
+        err = cudaMemset(grown_states, 0, states_bytes);
         if (err != cudaSuccess) {
-            set_error("cudaMemset2D(sp_cleared)", err);
+            set_error("cudaMemset(query_states)", err);
             cudaFree(grown_offsets);
             cudaFree(grown_start_node_ids);
             cudaFree(grown_start_offsets);
