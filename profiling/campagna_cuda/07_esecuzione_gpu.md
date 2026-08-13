@@ -4,7 +4,9 @@
 580.82.07, CUDA 12.8.93), clock SM fissati a 1590 MHz con `nvidia-smi -lgc` e
 `ncu --clock-control none`. Dati grezzi in
 [`dati_grezzi/esecuzione_gpu/`](dati_grezzi/esecuzione_gpu/), script in
-`dati_grezzi/campagna{,_b,_c,_d}.sh`.
+`dati_grezzi/campagna{,_b,_c,_d,_e}.sh`. §8 viene da una terza sessione, il 13
+agosto in serata, su una T4 di nuovo diversa: i confronti di §8 sono interni a
+quella sessione e hanno il proprio termine di paragone ricompilato lì.
 
 ⚠️ **VM diversa** da quella di [`REPORT.md`](REPORT.md): i numeri qui dentro
 stanno in piedi fra loro, non vanno mescolati con quelli della prima campagna.

@@ -1,5 +1,10 @@
 # Campagna di ottimizzazione CUDA — report
 
+> ⚠️ **Stato superato per le categorie.** Tutte e sei hanno ora un esperimento
+> eseguito e misurato su GPU, compresa la 2 (thread coarsening), che qui
+> risulta «non implementata». Lo stato finale, con i numeri, è in
+> [`07_esecuzione_gpu.md`](07_esecuzione_gpu.md).
+
 Hardware: **Tesla T4** (CC 7.5, 15 360 MiB, 40 SM), driver 580.82.07, CUDA
 12.8.93, su VM Colab. Clock SM bloccati a 1590 MHz con `nvidia-smi -lgc`,
 `ncu --clock-control none`. **Tutte le misure di prestazione qui dentro vengono

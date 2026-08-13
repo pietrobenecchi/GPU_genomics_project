@@ -1,5 +1,10 @@
 # E — Le sei categorie CUDA
 
+> ⚠️ **Stato superato per le categorie.** Tutte e sei hanno ora un esperimento
+> eseguito e misurato su GPU, compresa la 2 (thread coarsening), che qui
+> risulta «non implementata». Lo stato finale, con i numeri, è in
+> [`07_esecuzione_gpu.md`](07_esecuzione_gpu.md).
+
 ## 1. Privatization — *già sostanzialmente applicata*
 
 Non è stata aggiunta nessuna modifica artificiale. Quello che c'è già:
