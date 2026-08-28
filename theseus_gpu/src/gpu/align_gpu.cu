@@ -360,12 +360,23 @@ __device__ void merge_candidate_tile(QueryState &qs,
     // appended only if the cell was still inactive, exactly as access_alloc
     // decides it. The activity flag is sp_off, not the cell's own offset field.
     const bool needs_append = is_first && qs.sp_off[idx] == -1;
-    __syncthreads();
 
+    // No barrier between that read and the seeding of shared_accum below, and
+    // none after it either. Both used to be here and neither orders anything:
+    //
+    // - the read of sp_off above is separated from the only write to sp_off in
+    //   this function (the winner store at the bottom) by the barrier that
+    //   follows the sp_diags append, which stays. Across tiles the caller's
+    //   staging barrier and this function's trailing barrier do the same job;
+    // - shared_accum is written and read by thread 0 alone -- here and inside
+    //   block_prefix_alloc, which reads it as `shared_running` -- so program
+    //   order on that one thread is all the ordering it has ever needed. No
+    //   other thread of the block touches it, in this function or in densify;
+    // - shared_warp_base, which block_prefix_alloc is about to write, was left
+    //   free by the trailing barrier of its own previous call.
     if (tx == 0) {
         shared_accum = qs.sp_ndiags;
     }
-    __syncthreads();
     const int32_t slot =
         block_prefix_alloc(needs_append ? 1 : 0, shared_warp_base, shared_accum);
     if (needs_append) {
@@ -652,7 +663,12 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
                 wf[pos] = value;
             }
         }
-        __syncthreads();   // shared_warp_base is reused by the next tile
+        // No barrier closing the tile. It used to be here to keep the next
+        // tile's `shared_warp_base[warp] = __popc(ballot)` from overtaking this
+        // tile's readers, but block_prefix_alloc already ends on a barrier for
+        // exactly that reason, and it is the last thing to touch that array.
+        // The wavefront stores above need no barrier either: nothing reads wf
+        // until the barrier after the loop.
     }
 
     if (tx == 0) {
@@ -741,6 +757,22 @@ __device__ void sp_reset_block(QueryState &qs) {
     const int32_t tx = static_cast<int32_t>(threadIdx.x);
     const int32_t ntx = static_cast<int32_t>(blockDim.x);
     const int32_t ndiags = qs.sp_ndiags;   // uniform: nothing writes it here
+
+    // Nothing touched, nothing to reset -- and that is the common case, not an
+    // edge case: the same histogram densify's early return is built on says the
+    // ScratchPad is empty on 46-47 % of the calls (100 % on c4_exact). With
+    // ndiags == 0 the loop below is empty and `qs.sp_ndiags = 0` writes 0 over
+    // 0, so all this function does is two block-wide rendezvous. Returning here
+    // leaves exactly the same state for two barriers less, and process_vertex
+    // calls it three times per vertex per score.
+    //
+    // Every thread returns or none does: ndiags is uniform at entry, which the
+    // loop below has always required -- sp_ndiags is written only by thread 0
+    // inside merge_candidate_tile, published by the barrier that follows it.
+    if (ndiags == 0) {
+        return;
+    }
+
     for (int32_t i = tx; i < ndiags; i += ntx) {
         sp_reset_one(qs, i);
     }
@@ -801,7 +833,12 @@ __device__ Range finish_i_wavefront(QueryState &qs, int32_t score,
     if (tx == 0) {
         sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
     }
-    __syncthreads();
+    // No barrier after the push. sc_i_pos and its size are written by thread 0
+    // and read by thread 0 -- core_check_and_store_jumps below, then next
+    // vertex's prepare_i_candidate_ranges -- so program order covers them. The
+    // cells of sc_i_wf that other threads just wrote are published by densify's
+    // own closing barrier, which is still there. new_range is a return value:
+    // every thread already holds its own copy.
     return new_range;
 }
 
@@ -1049,12 +1086,14 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
                                Cell &block_end_cell) {
     const int32_t tx = static_cast<int32_t>(threadIdx.x);
 
+    // Seeded without a barrier: shared_range_* is read only by
+    // extend_and_consume_m_cells at the bottom of this function, and the
+    // barrier that publishes the conditional overwrite just above it publishes
+    // this default too. Nothing between here and there looks at either field.
     if (tx == 0) {
         shared_range_start = 0;
         shared_range_end = 0;
-
     }
-    __syncthreads();
 
     generate_and_merge_i_candidates(qs, scoring, query, query_len, graph,
                                     score, v, shared_i_ranges,
@@ -1083,7 +1122,19 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
             sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), d_range);
         }
     }
-    __syncthreads();
+    // No barrier closing the D phase, and none closing the M phase below. What
+    // it looked like it was ordering is ordered elsewhere:
+    //
+    // - the cells other threads wrote into sc_d_wf are published by densify's
+    //   own closing barrier, so the reads of them in the M sparsify below see
+    //   them;
+    // - sc_d_pos and its size are written and read by thread 0 alone
+    //   (prepare_m_sparsify_plan is the next reader), so program order covers
+    //   them;
+    // - thread 0 overwriting shared_sparsify_plan cannot overtake another
+    //   thread still reading the D plan, because every such read happens inside
+    //   run_sparsify_plan's tile loop and merge_candidate_tile ends each tile
+    //   on a block-wide barrier.
 
     sp_reset_block(qs);
     if (tx == 0) {
@@ -1102,7 +1153,9 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
             sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), m_range);
         }
     }
-    __syncthreads();
+    // Same three arguments as after the D phase. The reader of bs_m_wf is
+    // extend_and_consume_m_cells, which sits behind the barrier that publishes
+    // shared_range_*; the reader of sc_m_pos is thread 0, just below.
 
     sp_reset_block(qs);
     if (tx == 0) {
