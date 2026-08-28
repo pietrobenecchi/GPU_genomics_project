@@ -380,15 +380,15 @@ __device__ void merge_candidate_tile(QueryState &qs,
     const int32_t slot =
         block_prefix_alloc(needs_append ? 1 : 0, shared_warp_base, shared_accum);
     if (needs_append) {
-        if (slot < kScratchpadSpan) {
+        if (slot < kMaxActiveDiags) {
             qs.sp_diags[slot] = my_diag;
         } else {
-            cap_fail(qs, kCapScratchpadDiags, slot + 1, kScratchpadSpan);
+            cap_fail(qs, kCapScratchpadDiags, slot + 1, kMaxActiveDiags);
         }
     }
     if (tx == 0) {
         qs.sp_ndiags =
-            shared_accum < kScratchpadSpan ? shared_accum : kScratchpadSpan;
+            shared_accum < kMaxActiveDiags ? shared_accum : kMaxActiveDiags;
     }
     __syncthreads();
 
@@ -1535,7 +1535,7 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     }
 
     if (tx == 0) {
-        // Past kScratchpadSpan diagonals the append to sp_diags is dropped
+        // Past kMaxActiveDiags diagonals the append to sp_diags is dropped
         // while the winning cell is still written, so a cell can be left
         // active with nothing to reset it. The result of this query is already
         // discarded; this stops the dirt from reaching the next one on this

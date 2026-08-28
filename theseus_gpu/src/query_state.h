@@ -107,16 +107,40 @@ constexpr int kBeyondScopeCapacity = 4096;
 constexpr int kMaxScores = 8;
 
 /**
- * @brief Cells each per-score Scope wavefront (I and D) is built to hold, and
- * range entries each per-score position vector (M/I/D) is built to hold.
+ * @brief Vertices one alignment may touch. Defined here, ahead of the rest of
+ * the VerticesData bounds below, because the Scope's position vectors are
+ * derived from it.
+ */
+constexpr int kMaxActiveVertices = 256;
+
+/**
+ * @brief Cells each per-score Scope wavefront (I and D) is built to hold.
  *
  * The Scope wavefronts are the ones kProvisionalWavefrontCapacity was written
- * about; the position vectors hold one range per active vertex. Both PROVISIONAL.
- * Kept equal to kProvisionalWavefrontCapacity (defined in theseus_aligner_impl.h,
- * which cannot be included here without a cycle).
+ * about. PROVISIONAL. Kept equal to kProvisionalWavefrontCapacity (defined in
+ * theseus_aligner_impl.h, which cannot be included here without a cycle).
  */
 constexpr int kScopeWavefrontCapacity = 1024;
-constexpr int kScopePosCapacity = 1024;
+
+/**
+ * @brief Range entries each per-score position vector (M/I/D) is built to hold.
+ *
+ * Derived, not provisional. The position vector of a matrix at one score gets
+ * exactly one push per active vertex: sc_pos_push is called once for I, once
+ * for D and once for M per process_vertex, process_vertex runs once per active
+ * vertex, and sc_new_score empties the ring slot at the start of every score.
+ * The vertex loop is bounded by the active count read before it, so the size
+ * can never exceed kMaxActiveVertices -- on either path, the CPU aligner
+ * pushing from next_I/next_D/next_M or the kernel pushing from
+ * finish_i_wavefront and process_vertex.
+ *
+ * It was 1024, four times a bound the algorithm cannot reach, and the three
+ * vectors are held per score: 3 x kMaxScores x 1024 x sizeof(Range) is 384 KB
+ * of a QueryState against the 96 KB the bound actually allows. The guard in
+ * sc_pos_push stays, so a future change that breaks the argument is reported
+ * as kCapScopePos rather than silently truncated.
+ */
+constexpr int kScopePosCapacity = kMaxActiveVertices;
 
 /**
  * @brief A half-open range into a wavefront, one per active vertex. Mirrors the
@@ -135,9 +159,39 @@ struct Range {
  * the jump positions recorded per score per vertex.
  */
 constexpr int kMaxVertices = 2048;
-constexpr int kMaxActiveVertices = 256;
+// kMaxActiveVertices is defined above, with the Scope bound it derives.
 constexpr int kMaxInvalidSegments = 64;
 constexpr int kMaxJumpsPerScore = 32;
+
+/**
+ * @brief Entries the ScratchPad's active-diagonal list is built to hold.
+ *
+ * Derived from the capacities above rather than from the diagonal window, which
+ * is what it used to be sized on. sp_diags holds the diagonals touched since
+ * the last sp_reset, and a diagonal is only appended when a candidate lands on
+ * it, so the list can never be longer than the candidates merged in that
+ * window. The window is one of the three sparsify phases, each starting from an
+ * empty ScratchPad, and every source they draw from is itself bounded:
+ *
+ *   I phase   i_dense + i_jumps + m_dense + m_jumps
+ *             <= kScopeWavefrontCapacity + kMaxJumpsPerScore
+ *                + kBeyondScopeCapacity + kMaxJumpsPerScore
+ *   D phase   d_dense + m_dense + m_jumps
+ *   M phase   d_dense + i_dense + m_dense + m_jumps   <- the largest
+ *
+ * so the ceiling is the M phase: two Scope wavefronts, one BeyondScope range
+ * and one jump list. Written as an expression of those constants so that
+ * raising any of them cannot leave this one stale.
+ *
+ * It was kScratchpadSpan, 52 224 entries, of which the algorithm can reach
+ * 6 176: 204 KB of every QueryState for 24 KB of reachable list. The measured
+ * peak is far below even the derived bound -- the wavefront averages 2.5
+ * diagonals and peaks at 41 -- but the bound is what is used, not the
+ * measurement, so no dataset can outgrow it. sp_merge_candidate still reports
+ * kCapScratchpadDiags if it ever does.
+ */
+constexpr int kMaxActiveDiags = 2 * kScopeWavefrontCapacity +
+                                kBeyondScopeCapacity + kMaxJumpsPerScore;
 // Derived, not guessed. The stack only grows on a chain of zero-length
 // vertices, and the measured peak across all four GGBS datasets plus the sample
 // graph is 1 (store_I_jump is reached only by c4_err; none of the graphs holds a
@@ -184,7 +238,7 @@ struct QueryState {
     Cell    sp_wf[kScratchpadSpan];
     int32_t sp_off[kScratchpadSpan];
     Cell    sp_overflow_cell;
-    int32_t sp_diags[kScratchpadSpan];
+    int32_t sp_diags[kMaxActiveDiags];
     // How much of sp_off has ever been set to -1, in entries from 0. The
     // ScratchPad returns to its resting state by itself -- every write is to a
     // diagonal that is in sp_diags, and process_vertex ends with an sp_reset
@@ -502,8 +556,8 @@ THESEUS_HD inline void sp_merge_candidate(QueryState &qs, const Cell &c) {
         return;
     }
     if (qs.sp_off[idx] == -1) {
-        if (qs.sp_ndiags >= kScratchpadSpan) {
-            cap_fail(qs, kCapScratchpadDiags, qs.sp_ndiags + 1, kScratchpadSpan);
+        if (qs.sp_ndiags >= kMaxActiveDiags) {
+            cap_fail(qs, kCapScratchpadDiags, qs.sp_ndiags + 1, kMaxActiveDiags);
             return;
         }
         qs.sp_diags[qs.sp_ndiags] = c.diag;
