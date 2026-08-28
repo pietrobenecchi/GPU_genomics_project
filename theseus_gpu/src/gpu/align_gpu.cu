@@ -967,6 +967,84 @@ __device__ inline void warp_lcp(const char *query, int32_t query_len,
     }
 }
 
+/**
+ * @brief The score-0 seed extension, with the LCP shared across warp 0.
+ *
+ * On a read that matches the graph this is the whole alignment: the LCP walks
+ * the length of the query, and it used to walk it one character at a time on
+ * thread 0 while the rest of the block sat at the barrier that follows.
+ * c4_exact spends 814 us executing 3.7 M instructions, which is what waiting
+ * for one lane looks like.
+ *
+ * The warp advances the seed cell first; thread 0 then runs the ordered chain
+ * exactly as it was. That is sound because core_lcp is idempotent: it advances
+ * offset and j together while the characters match and stops at the first
+ * mismatch or boundary, so running it from a position it has already reached
+ * advances nothing. core_extend_diagonal recomputes j as diag + offset, and
+ * warp_lcp moved both by the same amount, so it recomputes the same j.
+ * Everything the chain decides afterwards -- the end check, the jump condition,
+ * the DFS over out-edges, the append order -- is a function of that final
+ * (offset, j) pair, and the pair is identical. Nothing ordered moves.
+ *
+ * Only the seed's own LCP is shared out. The LCPs inside the recursion stay
+ * serial: they belong to cells the DFS has not created yet, and on the exact
+ * tier the recursion is usually not entered at all, because a read that ends
+ * inside its vertex never reaches the last column.
+ *
+ * __noinline__ for the reason process_vertex carries it. Inlined here, the live
+ * set of warp_lcp stays alive across the whole of align_one and the kernel goes
+ * from 138 registers to 170 -- past the boundary at which a T4 SM holds 14
+ * warps rather than 11. Its own frame costs nothing measurable: it is entered
+ * once per query.
+ *
+ * Warp 0 only, all 32 lanes, so it must be called under a warp-uniform
+ * condition: it contains __ballot_sync and no __syncthreads.
+ */
+/**
+ * @brief How far the score-0 seed cell extends, computed across warp 0.
+ *
+ * On a read that matches the graph the seed extension is the whole alignment:
+ * the LCP walks the length of the query, and it used to walk it one character
+ * at a time on thread 0 while the rest of the block sat at the barrier that
+ * follows. c4_exact spends 814 us executing 3.7 M instructions, which is what
+ * waiting for one lane looks like.
+ *
+ * Only the *measurement* moves here, never the ordered work: this returns an
+ * offset and writes nothing. The caller then runs the existing thread-0 chain
+ * unchanged, and that is sound because core_lcp is idempotent -- it advances
+ * offset and j together while characters match and stops at the first mismatch
+ * or boundary, so running it from a position it has already reached advances
+ * nothing. core_extend_diagonal recomputes j as diag + offset, and warp_lcp
+ * moved both by the same amount, so it recomputes the same j. Everything the
+ * chain decides afterwards -- the end check, the jump condition, the DFS over
+ * out-edges, the append order -- is a function of that final (offset, j) pair,
+ * and the pair is identical.
+ *
+ * Only the seed's own LCP is shared out. The LCPs inside the recursion stay
+ * serial: they belong to cells the DFS has not created yet, and on the exact
+ * tier the recursion is usually not entered at all, because a read that ends
+ * inside its vertex never reaches the last column.
+ *
+ * __noinline__, and drawn exactly this narrow, for the reason process_vertex
+ * carries it. Inlined into align_one, warp_lcp's live set stays alive across
+ * the whole score loop and the kernel goes 138 -> 170 registers, past the
+ * boundary where a T4 SM holds 14 warps instead of 11. Wrapping the ordered
+ * chain in the same frame is worse still, 177. Wrapping the LCP alone -- which
+ * takes five scalars and returns one -- keeps the kernel at 138 with no spill.
+ *
+ * Warp 0 only, all 32 lanes, so the caller's condition must be warp-uniform:
+ * this contains __ballot_sync and no __syncthreads.
+ */
+__device__ __noinline__ int32_t warp_seed_offset(const char *query,
+                                                 int32_t query_len,
+                                                 const GraphCsrView &graph,
+                                                 int32_t vertex_id, int32_t diag,
+                                                 int32_t offset) {
+    int32_t j = diag + offset;
+    warp_lcp(query, query_len, graph, vertex_id, offset, j);
+    return offset;
+}
+
 __device__ void extend_and_consume_m_cells(QueryState &qs,
                                            const char *query,
                                            int32_t query_len,
@@ -1381,14 +1459,49 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
             break;
         }
 
-        if (tx == 0 && block_score == 0) {
-            bool end = block_end != 0;
-            Cell end_cell = block_end_cell;
-            core_extend_diagonal(qs, query, query_len, graph, block_score,
-                                 qs.bs_m_jumps_wf[0], qs.bs_m_jumps_wf[0], 0,
-                                 Cell::Matrix::MJumps, end, end_cell);
-            block_end = end ? 1 : 0;
-            block_end_cell = end_cell;
+        // The score-0 seed extension. On a read that matches the graph this is
+        // the whole alignment: the LCP walks the length of the query, and it
+        // used to walk it one character at a time on thread 0 while the rest of
+        // the block sat at the barrier below. c4_exact spends 814 us executing
+        // 3.7 M instructions, which is what waiting for one lane looks like.
+        //
+        // Warp 0 now advances the seed cell cooperatively before thread 0 runs
+        // the ordered chain, and the chain is left exactly as it was. That is
+        // sound because core_lcp is idempotent: it advances offset and j
+        // together while the characters match and stops at the first mismatch
+        // or boundary, so running it from a position it has already reached
+        // advances nothing. core_extend_diagonal recomputes j as
+        // diag + offset, and warp_lcp moved both by the same amount, so it
+        // recomputes the same j. Everything the chain decides afterwards --
+        // the end check, the jump condition, the DFS over out-edges, the append
+        // order -- is a function of that final (offset, j) pair, and the pair
+        // is identical. Nothing about the ordered part moves.
+        //
+        // Only the seed's own LCP is shared out. The LCPs inside the recursion
+        // stay serial: they belong to cells the DFS has not created yet, and on
+        // the exact tier the recursion is usually not entered at all, because a
+        // read that ends inside its vertex never reaches the last column.
+        //
+        // tx < 32 is warp-uniform (blockDim.x is 64, 128 or 256, so warp 0 is
+        // full), every lane reads the same cell, and warp_lcp needs both.
+        if (block_score == 0 && tx < 32) {
+            const Cell seed = qs.bs_m_jumps_wf[0];
+            const int32_t new_offset =
+                warp_seed_offset(query, query_len, graph, seed.vertex_id,
+                                 seed.diag, seed.offset);
+            if (tx == 0) {
+                // Lane 0 is thread 0, so no barrier separates this write from
+                // the read below: it is the same thread, in program order.
+                qs.bs_m_jumps_wf[0].offset = new_offset;
+
+                bool end = block_end != 0;
+                Cell end_cell = block_end_cell;
+                core_extend_diagonal(qs, query, query_len, graph, block_score,
+                                     qs.bs_m_jumps_wf[0], qs.bs_m_jumps_wf[0], 0,
+                                     Cell::Matrix::MJumps, end, end_cell);
+                block_end = end ? 1 : 0;
+                block_end_cell = end_cell;
+            }
         }
         __syncthreads();
 
