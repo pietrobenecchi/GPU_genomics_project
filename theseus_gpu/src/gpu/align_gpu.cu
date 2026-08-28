@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 namespace theseus {
@@ -1918,19 +1919,37 @@ const char *last_error() { return g_last_error; }
 
 const TimingReport &last_timing() { return g_last_timing; }
 
-Status align_batch(const BatchView &batch,
-                   const DeviceGraph *graph,
-                   DeviceWorkspace *workspace,
-                   const int32_t *start_node_ids,
-                   const int32_t *start_offsets,
-                   AlignScoring scoring,
-                   AlignOptions options,
-                   AlignResult *out_results,
-                   void *out_query_states,
-                   int32_t *out_seq_lengths) {
-    clear_error();
-    g_last_timing = TimingReport{};
-
+/**
+ * @brief One launch's worth of a batch.
+ *
+ * This is what align_batch used to be, with three differences that let the
+ * entry point below call it more than once for the same batch:
+ *
+ * - @p chunk_capacity, not @p batch.num_seqs, sizes the QueryState array. The
+ *   workspace stays grow-only and is reused by every chunk;
+ * - the packed traceback cells are *appended* to the host staging buffer at
+ *   @p packed_host_used rather than written from its start, and each query's
+ *   slice is recorded in @p packed_cell_offsets as an offset rather than a
+ *   pointer. Growing the buffer between chunks moves it, so the pointers can
+ *   only be formed once every chunk has landed -- align_batch does that;
+ * - timings accumulate into @p timing instead of replacing it.
+ *
+ * Every out_* pointer is already the chunk's slice.
+ */
+static Status align_chunk(const BatchView &batch,
+                          const DeviceGraph *graph,
+                          DeviceWorkspace *workspace,
+                          const int32_t *start_node_ids,
+                          const int32_t *start_offsets,
+                          AlignScoring scoring,
+                          AlignOptions options,
+                          AlignResult *out_results,
+                          void *out_query_states,
+                          int32_t *out_seq_lengths,
+                          int32_t chunk_capacity,
+                          size_t *packed_host_used,
+                          std::vector<size_t> *packed_cell_offsets,
+                          TimingReport *timing) {
     if (batch.num_seqs <= 0) {
         return Status::NotImplemented;
     }
@@ -1952,7 +1971,24 @@ Status align_batch(const BatchView &batch,
     const size_t per_query_i32_bytes = sizeof(int32_t) * static_cast<size_t>(batch.num_seqs);
     const size_t lengths_bytes = sizeof(int32_t) * static_cast<size_t>(batch.num_seqs);
     const size_t results_bytes = sizeof(AlignResult) * static_cast<size_t>(batch.num_seqs);
-    const size_t states_bytes = sizeof(QueryState) * static_cast<size_t>(batch.num_seqs);
+    // The one buffer sized on the chunk capacity rather than on this chunk's
+    // query count: it is the largest thing in the workspace by three orders of
+    // magnitude, and keeping it at the capacity is what lets every chunk reuse
+    // the same allocation (and the same one-off zeroing) instead of
+    // reallocating per chunk.
+    const size_t states_bytes = sizeof(QueryState) * static_cast<size_t>(chunk_capacity);
+
+    // Allocation sizes, as opposed to the copy sizes above. Every per-query
+    // buffer is allocated for a full chunk even when this chunk is short, which
+    // the last chunk of a batch always is: the capacity test below is what
+    // decides whether to reallocate, so sizing the arrays on one short chunk
+    // would leave them too small for the next full one while the test still
+    // said the workspace was big enough.
+    const size_t cap_q = static_cast<size_t>(chunk_capacity);
+    const size_t cap_offsets_bytes = sizeof(int32_t) * (cap_q + 1);
+    const size_t cap_per_query_i32_bytes = sizeof(int32_t) * cap_q;
+    const size_t cap_results_bytes = sizeof(AlignResult) * cap_q;
+    const size_t cap_meta_bytes = sizeof(TracebackMeta) * cap_q;
 
     char *d_chars = workspace->chars;
     int32_t *d_offsets = workspace->offsets;
@@ -1990,7 +2026,7 @@ Status align_batch(const BatchView &batch,
         workspace->chars = d_chars = grown;
         workspace->query_capacity = chars_bytes;
     }
-    if (static_cast<size_t>(batch.num_seqs) > workspace->batch_capacity) {
+    if (static_cast<size_t>(chunk_capacity) > workspace->batch_capacity) {
         int32_t *grown_offsets = nullptr;
         int32_t *grown_start_node_ids = nullptr;
         int32_t *grown_start_offsets = nullptr;
@@ -2011,10 +2047,10 @@ Status align_batch(const BatchView &batch,
                 goto cleanup;                                               \
             }                                                               \
         } while (false)
-        ALLOC_GROWN(grown_offsets, offsets_bytes, "cudaMalloc(offsets)");
-        ALLOC_GROWN(grown_start_node_ids, per_query_i32_bytes, "cudaMalloc(start_node_ids)");
-        ALLOC_GROWN(grown_start_offsets, per_query_i32_bytes, "cudaMalloc(start_offsets)");
-        ALLOC_GROWN(grown_results, results_bytes, "cudaMalloc(results)");
+        ALLOC_GROWN(grown_offsets, cap_offsets_bytes, "cudaMalloc(offsets)");
+        ALLOC_GROWN(grown_start_node_ids, cap_per_query_i32_bytes, "cudaMalloc(start_node_ids)");
+        ALLOC_GROWN(grown_start_offsets, cap_per_query_i32_bytes, "cudaMalloc(start_offsets)");
+        ALLOC_GROWN(grown_results, cap_results_bytes, "cudaMalloc(results)");
         ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
         // cudaMalloc does not zero, and two things need it to be zero.
         //
@@ -2059,9 +2095,8 @@ Status align_batch(const BatchView &batch,
             status = Status::CudaError;
             goto cleanup;
         }
-        ALLOC_GROWN(grown_lengths, lengths_bytes, "cudaMalloc(lengths)");
-        ALLOC_GROWN(grown_traceback_meta,
-                    sizeof(TracebackMeta) * static_cast<size_t>(batch.num_seqs),
+        ALLOC_GROWN(grown_lengths, cap_per_query_i32_bytes, "cudaMalloc(lengths)");
+        ALLOC_GROWN(grown_traceback_meta, cap_meta_bytes,
                     "cudaMalloc(traceback_meta)");
 #undef ALLOC_GROWN
         if (workspace->offsets != nullptr) cudaFree(workspace->offsets);
@@ -2078,7 +2113,7 @@ Status align_batch(const BatchView &batch,
         workspace->states = d_states = grown_states;
         workspace->lengths = d_lengths = grown_lengths;
         workspace->traceback_meta = d_traceback_meta = grown_traceback_meta;
-        workspace->batch_capacity = static_cast<size_t>(batch.num_seqs);
+        workspace->batch_capacity = static_cast<size_t>(chunk_capacity);
     }
 
     cudaEventCreate(&ev_start);
@@ -2256,34 +2291,44 @@ Status align_batch(const BatchView &batch,
                 }
                 workspace->pack_offsets_capacity = static_cast<size_t>(batch.num_seqs);
             }
-            if (workspace->packed_host_capacity < cells) {
+            // Room for what earlier chunks already appended plus this chunk.
+            // The grow copies the existing prefix across rather than dropping
+            // it: those cells are this batch's results, and the caller has not
+            // seen them yet.
+            if (workspace->packed_host_capacity < *packed_host_used + total_cells) {
+                size_t want = workspace->packed_host_capacity * 2;
+                if (want < *packed_host_used + total_cells) {
+                    want = *packed_host_used + total_cells;
+                }
                 // Page-locked if it can be: this is the batch's whole traceback
                 // payload now, and the copy is the reason the buffer exists.
                 // Pageable is a correct fallback, only slower.
+                void *host_buffer = nullptr;
+                bool pinned = cudaHostAlloc(&host_buffer, sizeof(Cell) * want,
+                                            cudaHostAllocDefault) == cudaSuccess;
+                if (!pinned) {
+                    cudaGetLastError();   // the failed alloc is handled, not propagated
+                    host_buffer = std::malloc(sizeof(Cell) * want);
+                }
+                if (host_buffer == nullptr) {
+                    set_error("alloc(packed traceback host)", cudaErrorMemoryAllocation);
+                    status = Status::CudaError;
+                    goto cleanup;
+                }
                 if (workspace->packed_host != nullptr) {
+                    if (*packed_host_used > 0) {
+                        std::memcpy(host_buffer, workspace->packed_host,
+                                    sizeof(Cell) * (*packed_host_used));
+                    }
                     if (workspace->packed_host_pinned) {
                         cudaFreeHost(workspace->packed_host);
                     } else {
                         std::free(workspace->packed_host);
                     }
-                    workspace->packed_host = nullptr;
-                }
-                void *host_buffer = nullptr;
-                workspace->packed_host_pinned =
-                    cudaHostAlloc(&host_buffer, sizeof(Cell) * cells,
-                                  cudaHostAllocDefault) == cudaSuccess;
-                if (!workspace->packed_host_pinned) {
-                    cudaGetLastError();   // the failed alloc is handled, not propagated
-                    host_buffer = std::malloc(sizeof(Cell) * cells);
-                }
-                if (host_buffer == nullptr) {
-                    set_error("alloc(packed traceback host)", cudaErrorMemoryAllocation);
-                    workspace->packed_host_capacity = 0;
-                    status = Status::CudaError;
-                    goto cleanup;
                 }
                 workspace->packed_host = static_cast<Cell *>(host_buffer);
-                workspace->packed_host_capacity = cells;
+                workspace->packed_host_pinned = pinned;
+                workspace->packed_host_capacity = want;
             }
 
             err = cudaMemcpy(workspace->pack_offsets, base.data(),
@@ -2303,7 +2348,8 @@ Status align_batch(const BatchView &batch,
                     status = Status::CudaError;
                     goto cleanup;
                 }
-                err = cudaMemcpy(workspace->packed_host, workspace->packed_device,
+                err = cudaMemcpy(workspace->packed_host + *packed_host_used,
+                                 workspace->packed_device,
                                  sizeof(Cell) * total_cells, cudaMemcpyDeviceToHost);
                 if (err != cudaSuccess) {
                     set_error("cudaMemcpy(packed traceback D2H)", err);
@@ -2311,15 +2357,13 @@ Status align_batch(const BatchView &batch,
                     goto cleanup;
                 }
             }
+            // Offsets, not pointers: a later chunk may move the buffer.
+            // align_batch turns these into pointers once every chunk is in.
             for (int32_t i = 0; i < batch.num_seqs; ++i) {
-                CompactTracebackState &host = host_states[i];
-                const Cell *slice = workspace->packed_host +
-                                    base[static_cast<size_t>(i)];
-                host.bs_m_wf = slice;
-                host.bs_m_jumps_wf = slice + host.bs_m_wf_size;
-                host.bs_i_jumps_wf = slice + host.bs_m_wf_size +
-                                     host.bs_m_jumps_wf_size;
+                packed_cell_offsets->push_back(
+                    *packed_host_used + static_cast<size_t>(base[static_cast<size_t>(i)]));
             }
+            *packed_host_used += total_cells;
         }
     }
     if (ev_d2h != nullptr) {
@@ -2327,10 +2371,17 @@ Status align_batch(const BatchView &batch,
         cudaEventSynchronize(ev_d2h);
     }
     if (ev_start != nullptr && ev_h2d != nullptr && ev_kernel != nullptr && ev_d2h != nullptr) {
-        cudaEventElapsedTime(&g_last_timing.h2d_ms, ev_start, ev_h2d);
-        cudaEventElapsedTime(&g_last_timing.kernel_ms, ev_h2d, ev_kernel);
-        cudaEventElapsedTime(&g_last_timing.d2h_ms, ev_kernel, ev_d2h);
-        cudaEventElapsedTime(&g_last_timing.end_to_end_ms, ev_start, ev_d2h);
+        // Accumulated, not assigned: a batch is one or more chunks and the
+        // caller is told what the whole batch cost.
+        float h2d = 0.0f, kernel = 0.0f, d2h = 0.0f, total = 0.0f;
+        cudaEventElapsedTime(&h2d, ev_start, ev_h2d);
+        cudaEventElapsedTime(&kernel, ev_h2d, ev_kernel);
+        cudaEventElapsedTime(&d2h, ev_kernel, ev_d2h);
+        cudaEventElapsedTime(&total, ev_start, ev_d2h);
+        timing->h2d_ms += h2d;
+        timing->kernel_ms += kernel;
+        timing->d2h_ms += d2h;
+        timing->end_to_end_ms += total;
     }
 
 cleanup:
@@ -2339,6 +2390,133 @@ cleanup:
     if (ev_kernel != nullptr) cudaEventDestroy(ev_kernel);
     if (ev_d2h != nullptr) cudaEventDestroy(ev_d2h);
     return status;
+}
+
+/**
+ * @brief Queries one launch may hold, from what the device can actually spare.
+ *
+ * The QueryState array is the only part of the workspace that scales with the
+ * batch -- 3.95 MB each against a few tens of bytes for everything else -- so
+ * it alone decides how many queries fit, and no other term is worth modelling.
+ *
+ * The budget is the free memory plus whatever the state array already holds,
+ * because that allocation is reusable rather than lost, minus a reserve for the
+ * graph, the staging buffers, the context and fragmentation. Derived from
+ * cudaMemGetInfo at call time, so it follows the device it is running on
+ * instead of a constant tuned to one card.
+ *
+ * Never below what is already allocated: that memory is paid for. Never above
+ * the batch: a batch that fits is still one launch, exactly as before.
+ */
+static int32_t chunk_capacity_for(const DeviceWorkspace *workspace,
+                                  int32_t num_seqs) {
+    // Test hook. Chunking is only reachable on its own terms by a batch large
+    // enough to exhaust the device, which is an awkward thing to require of a
+    // regression run; forcing the size lets the same batch be put through one
+    // launch and through many and the two outputs compared directly. Ignored
+    // unless set to a positive number, so it costs a getenv per batch and
+    // changes nothing otherwise.
+    if (const char *forced = std::getenv("THESEUS_GPU_CHUNK")) {
+        const int value = std::atoi(forced);
+        if (value > 0) {
+            return value < num_seqs ? value : num_seqs;
+        }
+    }
+
+    const size_t state_bytes = sizeof(QueryState);
+    size_t free_bytes = 0, total_bytes = 0;
+    size_t budget = state_bytes;   // one query rather than a guess, if the query fails
+    if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess) {
+        const size_t committed = workspace->batch_capacity * state_bytes;
+        const size_t reserve = size_t{192} << 20;
+        const size_t pool = free_bytes + committed;
+        budget = pool > reserve ? pool - reserve : 0;
+    } else {
+        cudaGetLastError();   // handled, not propagated
+    }
+    size_t n = budget / state_bytes;
+    if (n < 1) {
+        n = 1;
+    }
+    if (n < workspace->batch_capacity) {
+        n = workspace->batch_capacity;
+    }
+    if (n > static_cast<size_t>(num_seqs)) {
+        n = static_cast<size_t>(num_seqs);
+    }
+    return static_cast<int32_t>(n);
+}
+
+Status align_batch(const BatchView &batch,
+                   const DeviceGraph *graph,
+                   DeviceWorkspace *workspace,
+                   const int32_t *start_node_ids,
+                   const int32_t *start_offsets,
+                   AlignScoring scoring,
+                   AlignOptions options,
+                   AlignResult *out_results,
+                   void *out_query_states,
+                   int32_t *out_seq_lengths) {
+    clear_error();
+    g_last_timing = TimingReport{};
+
+    if (batch.num_seqs <= 0) {
+        return Status::NotImplemented;
+    }
+    if (graph == nullptr || workspace == nullptr) {
+        return Status::NoDevice;
+    }
+
+    const int32_t chunk = chunk_capacity_for(workspace, batch.num_seqs);
+
+    CompactTracebackState *host_states =
+        static_cast<CompactTracebackState *>(out_query_states);
+    size_t packed_host_used = 0;
+    std::vector<size_t> packed_cell_offsets;
+    if (host_states != nullptr) {
+        packed_cell_offsets.reserve(static_cast<size_t>(batch.num_seqs));
+    }
+
+    // Chunks are consumed in order and each writes its own slice of the output
+    // arrays, so the batch comes back in the caller's order whether it took one
+    // launch or twenty.
+    for (int32_t start = 0; start < batch.num_seqs; start += chunk) {
+        const int32_t n = (batch.num_seqs - start) < chunk ? (batch.num_seqs - start)
+                                                           : chunk;
+
+        // The kernel reads batch.offsets[query_id] and indexes batch.chars from
+        // it, so a chunk needs its offsets rebased to its own first character.
+        std::vector<int32_t> chunk_offsets(static_cast<size_t>(n) + 1);
+        const int32_t base_char = batch.offsets[start];
+        for (int32_t i = 0; i <= n; ++i) {
+            chunk_offsets[static_cast<size_t>(i)] = batch.offsets[start + i] - base_char;
+        }
+        const BatchView chunk_view{batch.chars + base_char, chunk_offsets.data(), n};
+
+        const Status status = align_chunk(
+            chunk_view, graph, workspace, start_node_ids + start,
+            start_offsets + start, scoring, options, out_results + start,
+            host_states != nullptr ? host_states + start : nullptr,
+            out_seq_lengths + start, chunk, &packed_host_used,
+            &packed_cell_offsets, &g_last_timing);
+        if (status != Status::Ok) {
+            return status;
+        }
+    }
+
+    // Every chunk has landed, so the staging buffer will not move again and the
+    // recorded offsets can become the pointers the caller reads.
+    if (host_states != nullptr) {
+        for (size_t i = 0; i < packed_cell_offsets.size(); ++i) {
+            CompactTracebackState &host = host_states[i];
+            const Cell *slice = workspace->packed_host + packed_cell_offsets[i];
+            host.bs_m_wf = slice;
+            host.bs_m_jumps_wf = slice + host.bs_m_wf_size;
+            host.bs_i_jumps_wf = slice + host.bs_m_wf_size +
+                                 host.bs_m_jumps_wf_size;
+        }
+    }
+    return Status::Ok;
 }
 
 DeviceGraph *upload_graph(const GraphCsrView &graph) {
