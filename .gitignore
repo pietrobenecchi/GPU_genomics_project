@@ -22,18 +22,23 @@ theseus_gpu/data/validation/ggbs/gpu_results/
 theseus_gpu/data/sample_output.gaf
 theseus_gpu/validation_runs/
 
-# Agent instruction and handoff documents. Kept out of the repository on
-# purpose: they are working notes addressed to a tool, not project source.
+# Working notes: instructions, handoffs and analyses. Kept on disk but out of
+# the repository, including docs/optimization_log.md, which stays append-only
+# on disk and is simply not tracked.
 CLAUDE.md
 HANDOFF.md
 GPU_PORT_PROMPT.md
 **/GPU_PORT_PROMPT.md
 .claude/
-
-# Working notes and analyses. Kept on disk but out of the repository, including
-# docs/optimization_log.md: it stays append-only, it is just no longer tracked.
 theseus_gpu/docs/
 
 __pycache__/
 **/__pycache__/
 *.pyc
+
+# Profiling output: the raw Nsight dumps (161 MB of .ncu-rep/.nsys-rep) and the
+# campaign notes written alongside them, plus whatever scripts/run_all.sh
+# produces. All kept on disk, none of it project source.
+profile-cuda/
+profiling/
+theseus_gpu/theseus-proxy-colab.zip

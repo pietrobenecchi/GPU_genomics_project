@@ -134,7 +134,7 @@ def datasets_in(suite: str) -> list[str]:
 
     A size suite selects on size alone. A tier suite keeps the meaning it has
     always had -- the four frozen correctness workloads -- so that the two
-    commands in CLAUDE.md still run those four and nothing else; the larger sets
+    commands in the README still run those four and nothing else; the larger sets
     are reached through the size suites, which is also what keeps a routine
     `--suite complex` from demanding the 8.6 GB a 2048-query launch needs.
     """

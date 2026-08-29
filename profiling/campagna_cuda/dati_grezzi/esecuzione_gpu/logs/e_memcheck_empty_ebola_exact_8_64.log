@@ -1,7 +1,0 @@
-========= COMPUTE-SANITIZER
-GPU backend: threads/block 64; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.026144 kernel=10.035008 d2h=0.873632 total=10.934784
-GPU timing: h2d 0.026144 ms; kernel 10.035 ms; d2h 0.873632 ms; total 10.9348 ms
-GPU host stages: prepare 0.002216 ms; graph 224.088 ms; host_buffers 1.95326 ms; cpu_verification 0 ms; traceback 0.003002 ms; alignment_construction 0.001871 ms; align_batch 237.357 ms
-Aligned 8 sequences in 237454 microseconds on gpu
-Application timing: graph_parse 2.70187 ms; input_parse 0.018139 ms; gaf_serialization 0.028907 ms; output_flush 0.016775 ms; total 240.322 ms
-========= ERROR SUMMARY: 0 errors

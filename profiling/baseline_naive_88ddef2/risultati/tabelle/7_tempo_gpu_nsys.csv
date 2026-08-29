@@ -1,5 +1,0 @@
-dataset,thread_per_blocco,copia_D2H_ms,cudaMalloc_ms,cudaMemset_ms,kernel_allineamento_ms,altri_kernel_e_H2D_ms,totale_GPU_ms,kernel_%_del_totale,byte_copiati_D2H_MB
-ebola_exact_smoke,128,252.3,169.4,4.85,0.51,0.09,427.2,0.12,1128.4
-ebola_error_smoke,128,238.9,136.0,4.85,0.99,0.09,380.8,0.26,1128.4
-c4_exact,128,540.7,148.3,9.67,5.67,0.45,704.8,0.8,2257.0
-c4_err,128,486.0,138.6,9.67,5.91,0.45,640.6,0.92,2257.0
