@@ -1,6 +1,13 @@
 /**
  * @file align_gpu.cu
- * @brief CUDA backend for the Theseus proxy aligner.
+ * @brief Every line of device code the backend has, and nothing else.
+ *
+ * This is deliberately one translation unit: the kernel's register count is a
+ * product of nvcc inlining the whole call chain below into it, so splitting the
+ * device code across .cu files would need relocatable device code and would
+ * undo that. What is host code -- the workspace, the graph, the batch
+ * orchestration -- lives in device_memory.cu and align_batch.cu, which reach
+ * the kernels through the wrappers at the bottom of this file.
  *
  * One block owns one query for the whole alignment. Inside the block the phases
  * that are independent per element run across the threads (the invalid-segment
@@ -13,33 +20,17 @@
 #include "gpu/align_gpu.h"
 #include "query_state.h"
 #include "gpu/align_core.h"
+#include "gpu/kernel_launch.h"
 
 #include <cuda_runtime.h>
 
 #include <cstddef>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
 
 namespace theseus {
 namespace gpu {
 
 namespace {
 
-char g_last_error[256] = {0};
-TimingReport g_last_timing;
-
-/**
- * @brief Bytes of dynamic shared memory one block needs.
- *
- * The staging buffers hold exactly one tile, so the requirement scales with the
- * block size instead of with kScopeWavefrontCapacity. The layout here must match
- * the partitioning at the top of theseus_align_batch_kernel.
- *
- * One Cell tile, not two: the M cells are no longer staged in shared memory
- * because the thread that extends a cell writes it straight back to bs_m_wf.
- */
 /**
  * @brief Query characters staged in shared memory per block, at most.
  *
@@ -56,6 +47,16 @@ TimingReport g_last_timing;
  */
 constexpr int32_t kQueryTileBytes = 1024;
 
+/**
+ * @brief Bytes of dynamic shared memory one block needs.
+ *
+ * The staging buffers hold exactly one tile, so the requirement scales with the
+ * block size instead of with kScopeWavefrontCapacity. The layout here must match
+ * the partitioning at the top of theseus_align_batch_kernel.
+ *
+ * One Cell tile, not two: the M cells are no longer staged in shared memory
+ * because the thread that extends a cell writes it straight back to bs_m_wf.
+ */
 size_t kernel_shared_bytes(int32_t threads_per_block) {
     return static_cast<size_t>(threads_per_block) *
                (sizeof(Cell) + 2 * sizeof(int)) +
@@ -107,13 +108,6 @@ struct ICandidateRanges {
     int32_t total;
 };
 
-
-void set_error(const char *context, cudaError_t err) {
-    std::snprintf(g_last_error, sizeof(g_last_error), "%s: %s", context,
-                  cudaGetErrorString(err));
-}
-
-void clear_error() { g_last_error[0] = '\0'; }
 
 /**
  * @brief One block per sequence, the same geometry the alignment kernel uses: a
@@ -1644,18 +1638,6 @@ __global__ void theseus_align_batch_kernel(BatchView batch, GraphCsrView graph,
               block_end_cell);
 }
 
-struct TracebackMeta {
-    int32_t m_size;
-    int32_t m_jumps_size;
-    int32_t i_jumps_size;
-    int32_t peak_wf;
-    int32_t cap_required;
-    int32_t cap_available;
-    int8_t capacity_exceeded;
-    int8_t cap_reason;
-    int8_t reserved[2];
-};
-
 __global__ void traceback_meta_kernel(const QueryState *states, int32_t count,
                                       TracebackMeta *metadata) {
     const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
@@ -1755,903 +1737,65 @@ __global__ void graph_readback_kernel(GraphCsrView graph,
     }
 }
 
-/**
- * @brief cudaMalloc + H2D for one array. A zero-length array yields a null
- * device pointer, which the kernels never dereference because the matching
- * offset range is empty.
- */
-template <typename T>
-bool upload_array(T **device_ptr, const T *host_ptr, size_t count,
-                  const char *what) {
-    *device_ptr = nullptr;
-    if (count == 0) {
-        return true;
-    }
-
-    cudaError_t err = cudaMalloc(device_ptr, sizeof(T) * count);
-    if (err != cudaSuccess) {
-        set_error(what, err);
-        return false;
-    }
-
-    err = cudaMemcpy(*device_ptr, host_ptr, sizeof(T) * count, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-        set_error(what, err);
-        return false;
-    }
-    return true;
-}
-
-/**
- * @brief cudaMalloc for an output array, filled with a sentinel.
- *
- * The sentinel matters: an output buffer must never be seeded with the values
- * the caller expects, or a kernel that writes nothing at all would still
- * compare equal. Anything the kernel skips comes back as 0xFF bytes and fails
- * the comparison loudly.
- */
-template <typename T>
-bool alloc_output_array(T **device_ptr, size_t count, const char *what) {
-    *device_ptr = nullptr;
-    if (count == 0) {
-        return true;
-    }
-
-    cudaError_t err = cudaMalloc(device_ptr, sizeof(T) * count);
-    if (err != cudaSuccess) {
-        set_error(what, err);
-        return false;
-    }
-
-    err = cudaMemset(*device_ptr, 0xFF, sizeof(T) * count);
-    if (err != cudaSuccess) {
-        set_error(what, err);
-        return false;
-    }
-    return true;
-}
-
-/**
- * @brief D2H for one array.
- */
-template <typename T>
-bool download_array(T *host_ptr, const T *device_ptr, size_t count,
-                    const char *what) {
-    if (count == 0) {
-        return true;
-    }
-
-    cudaError_t err = cudaMemcpy(host_ptr, device_ptr, sizeof(T) * count,
-                                 cudaMemcpyDeviceToHost);
-    if (err != cudaSuccess) {
-        set_error(what, err);
-        return false;
-    }
-    return true;
-}
-
 }  // namespace
 
 /**
- * @brief The graph in device memory, plus the sizes needed to read it back.
+ * @brief The launch wrappers declared in kernel_launch.h.
+ *
+ * Each one owns its kernel's geometry -- the block count, and for the alignment
+ * kernel the dynamic shared memory -- so that no caller can disagree with the
+ * kernel about either. They launch and report; waiting is the caller's business.
  */
-struct DeviceGraph {
-    GraphCsrView view;  // Pointers below, as seen by kernels
-    char *vertex_chars = nullptr;
-    int32_t *vertex_offsets = nullptr;
-    int32_t *edge_targets = nullptr;
-    int32_t *edge_overlaps = nullptr;
-    int32_t *edge_offsets = nullptr;
-    int32_t num_chars = 0;
-    int32_t num_edges = 0;
-};
-
-struct DeviceWorkspace {
-    char *chars = nullptr;
-    int32_t *offsets = nullptr;
-    int32_t *start_node_ids = nullptr;
-    int32_t *start_offsets = nullptr;
-    AlignResult *results = nullptr;
-    QueryState *states = nullptr;
-    int32_t *lengths = nullptr;
-    TracebackMeta *traceback_meta = nullptr;
-    size_t query_capacity = 0;
-    size_t batch_capacity = 0;
-
-    // Staging for the packed traceback: the cells the backtrace will actually
-    // read, end to end, plus where each query's slice starts. Sized on the
-    // cells a batch really used, so they grow with the workload and not with
-    // kBeyondScopeCapacity. Kept on the workspace so that the page lock is paid
-    // once per process, like the other host buffers.
-    Cell *packed_device = nullptr;
-    int32_t *pack_offsets = nullptr;      // device, one base per query
-    size_t packed_device_capacity = 0;    // in cells
-    size_t pack_offsets_capacity = 0;     // in queries
-    Cell *packed_host = nullptr;
-    size_t packed_host_capacity = 0;      // in cells
-    bool packed_host_pinned = false;
-};
-
-void *alloc_host_pinned(size_t bytes) {
-    if (bytes == 0) {
-        return nullptr;
-    }
-    void *buffer = nullptr;
-    const cudaError_t err = cudaHostAlloc(&buffer, bytes, cudaHostAllocDefault);
-    if (err != cudaSuccess) {
-        set_error("cudaHostAlloc(host batch buffers)", err);
-        return nullptr;
-    }
-    return buffer;
+cudaError_t launch_seq_length(int32_t threads_per_block, const int32_t *offsets,
+                              int32_t num_seqs, int32_t *out_seq_lengths) {
+    const int blocks = (num_seqs + threads_per_block - 1) / threads_per_block;
+    seq_length_kernel<<<blocks, threads_per_block>>>(offsets, num_seqs,
+                                                    out_seq_lengths);
+    return cudaGetLastError();
 }
 
-void free_host_pinned(void *buffer) {
-    if (buffer != nullptr) {
-        cudaFreeHost(buffer);
-    }
-}
-
-DeviceWorkspace *create_workspace() { return new DeviceWorkspace(); }
-
-void free_workspace(DeviceWorkspace *workspace) {
-    if (workspace == nullptr) return;
-    cudaFree(workspace->chars);
-    cudaFree(workspace->offsets);
-    cudaFree(workspace->start_node_ids);
-    cudaFree(workspace->start_offsets);
-    cudaFree(workspace->results);
-    cudaFree(workspace->states);
-    cudaFree(workspace->lengths);
-    cudaFree(workspace->traceback_meta);
-    cudaFree(workspace->packed_device);
-    cudaFree(workspace->pack_offsets);
-    if (workspace->packed_host != nullptr) {
-        if (workspace->packed_host_pinned) {
-            cudaFreeHost(workspace->packed_host);
-        } else {
-            std::free(workspace->packed_host);
-        }
-    }
-    delete workspace;
-}
-
-const char *last_error() { return g_last_error; }
-
-const TimingReport &last_timing() { return g_last_timing; }
-
-/**
- * @brief One launch's worth of a batch.
- *
- * This is what align_batch used to be, with three differences that let the
- * entry point below call it more than once for the same batch:
- *
- * - @p chunk_capacity, not @p batch.num_seqs, sizes the QueryState array. The
- *   workspace stays grow-only and is reused by every chunk;
- * - the packed traceback cells are *appended* to the host staging buffer at
- *   @p packed_host_used rather than written from its start, and each query's
- *   slice is recorded in @p packed_cell_offsets as an offset rather than a
- *   pointer. Growing the buffer between chunks moves it, so the pointers can
- *   only be formed once every chunk has landed -- align_batch does that;
- * - timings accumulate into @p timing instead of replacing it.
- *
- * Every out_* pointer is already the chunk's slice.
- */
-static Status align_chunk(const BatchView &batch,
-                          const DeviceGraph *graph,
-                          DeviceWorkspace *workspace,
-                          const int32_t *start_node_ids,
-                          const int32_t *start_offsets,
-                          AlignScoring scoring,
-                          AlignOptions options,
-                          AlignResult *out_results,
-                          void *out_query_states,
-                          int32_t *out_seq_lengths,
-                          int32_t chunk_capacity,
-                          size_t *packed_host_used,
-                          std::vector<size_t> *packed_cell_offsets,
-                          TimingReport *timing) {
-    if (batch.num_seqs <= 0) {
-        return Status::NotImplemented;
-    }
-    if (graph == nullptr || workspace == nullptr) {
-        return Status::NoDevice;
-    }
-
-    int device_count = 0;
-    cudaError_t err = cudaGetDeviceCount(&device_count);
-    if (err != cudaSuccess || device_count == 0) {
-        if (err != cudaSuccess) {
-            set_error("cudaGetDeviceCount", err);
-        }
-        return Status::NoDevice;
-    }
-
-    const size_t chars_bytes = static_cast<size_t>(batch.offsets[batch.num_seqs]);
-    const size_t offsets_bytes = sizeof(int32_t) * (static_cast<size_t>(batch.num_seqs) + 1);
-    const size_t per_query_i32_bytes = sizeof(int32_t) * static_cast<size_t>(batch.num_seqs);
-    const size_t lengths_bytes = sizeof(int32_t) * static_cast<size_t>(batch.num_seqs);
-    const size_t results_bytes = sizeof(AlignResult) * static_cast<size_t>(batch.num_seqs);
-    // The one buffer sized on the chunk capacity rather than on this chunk's
-    // query count: it is the largest thing in the workspace by three orders of
-    // magnitude, and keeping it at the capacity is what lets every chunk reuse
-    // the same allocation (and the same one-off zeroing) instead of
-    // reallocating per chunk.
-    const size_t states_bytes = sizeof(QueryState) * static_cast<size_t>(chunk_capacity);
-
-    // Allocation sizes, as opposed to the copy sizes above. Every per-query
-    // buffer is allocated for a full chunk even when this chunk is short, which
-    // the last chunk of a batch always is: the capacity test below is what
-    // decides whether to reallocate, so sizing the arrays on one short chunk
-    // would leave them too small for the next full one while the test still
-    // said the workspace was big enough.
-    const size_t cap_q = static_cast<size_t>(chunk_capacity);
-    const size_t cap_offsets_bytes = sizeof(int32_t) * (cap_q + 1);
-    const size_t cap_per_query_i32_bytes = sizeof(int32_t) * cap_q;
-    const size_t cap_results_bytes = sizeof(AlignResult) * cap_q;
-    const size_t cap_meta_bytes = sizeof(TracebackMeta) * cap_q;
-
-    char *d_chars = workspace->chars;
-    int32_t *d_offsets = workspace->offsets;
-    int32_t *d_start_node_ids = workspace->start_node_ids;
-    int32_t *d_start_offsets = workspace->start_offsets;
-    AlignResult *d_results = workspace->results;
-    QueryState *d_states = workspace->states;
-    int32_t *d_lengths = workspace->lengths;
-    TracebackMeta *d_traceback_meta = workspace->traceback_meta;
-    BatchView device_batch{nullptr, nullptr, 0};
-    Status status = Status::Ok;
-    cudaEvent_t ev_start = nullptr;
-    cudaEvent_t ev_h2d = nullptr;
-    cudaEvent_t ev_kernel = nullptr;
-    cudaEvent_t ev_d2h = nullptr;
-    int blocks = 0;
-    const int32_t threads_per_block =
-        (options.threads_per_block == 64 || options.threads_per_block == 128 ||
-         options.threads_per_block == 256)
-            ? options.threads_per_block
-            : 128;
-    // Declared with the rest before the first `goto cleanup`: jumping over an
-    // initialisation is ill-formed.
-    const size_t smem_bytes = kernel_shared_bytes(threads_per_block);
-
-    if (chars_bytes > workspace->query_capacity) {
-        char *grown = nullptr;
-        err = cudaMalloc(&grown, chars_bytes);
-        if (err != cudaSuccess) {
-            set_error("cudaMalloc(chars)", err);
-            status = Status::CudaError;
-            goto cleanup;
-        }
-        if (workspace->chars != nullptr) cudaFree(workspace->chars);
-        workspace->chars = d_chars = grown;
-        workspace->query_capacity = chars_bytes;
-    }
-    if (static_cast<size_t>(chunk_capacity) > workspace->batch_capacity) {
-        int32_t *grown_offsets = nullptr;
-        int32_t *grown_start_node_ids = nullptr;
-        int32_t *grown_start_offsets = nullptr;
-        AlignResult *grown_results = nullptr;
-        QueryState *grown_states = nullptr;
-        int32_t *grown_lengths = nullptr;
-        TracebackMeta *grown_traceback_meta = nullptr;
-#define ALLOC_GROWN(ptr, bytes, label)                                      \
-        do {                                                                \
-            err = cudaMalloc(&(ptr), (bytes));                              \
-            if (err != cudaSuccess) {                                       \
-                set_error((label), err);                                    \
-                cudaFree(grown_offsets); cudaFree(grown_start_node_ids);    \
-                cudaFree(grown_start_offsets); cudaFree(grown_results);     \
-                cudaFree(grown_states); cudaFree(grown_lengths);            \
-                cudaFree(grown_traceback_meta);                             \
-                status = Status::CudaError;                                 \
-                goto cleanup;                                               \
-            }                                                               \
-        } while (false)
-        ALLOC_GROWN(grown_offsets, cap_offsets_bytes, "cudaMalloc(offsets)");
-        ALLOC_GROWN(grown_start_node_ids, cap_per_query_i32_bytes, "cudaMalloc(start_node_ids)");
-        ALLOC_GROWN(grown_start_offsets, cap_per_query_i32_bytes, "cudaMalloc(start_offsets)");
-        ALLOC_GROWN(grown_results, cap_results_bytes, "cudaMalloc(results)");
-        ALLOC_GROWN(grown_states, states_bytes, "cudaMalloc(query_states)");
-        // cudaMalloc does not zero, and two things need it to be zero.
-        //
-        // sp_cleared has to read as 0 -- "no entry of sp_off has been cleared
-        // yet" -- on a state's first use, or the first query would skip a clear
-        // it still needs.
-        //
-        // And the argument that nothing else needs zeroing turned out to be
-        // wrong. The commit that dropped the per-batch cudaMemset said it was
-        // "an argument, not a proof, so it is checked rather than trusted";
-        // checking it says no: on ebola_exact_smoke, 8 queries, initcheck
-        // reports 73 758 reads of uninitialised device memory, all of them the
-        // same site once deduplicated --
-        //
-        //     core_check_end            align_core.h:39
-        //     core_extend_diagonal      align_core.h:281
-        //     align_one                 align_gpu.cu:1149   the score-0 seed
-        //
-        // -- and every commit after it inherits them, while the commit before
-        // it is clean. The reads have never changed a result: all ten datasets
-        // match their golden byte for byte at 64, 128 and 256 threads. But a
-        // value read out of memory nobody wrote is whatever the last tenant of
-        // that DRAM left, so "it matched" is a property of one run, not of the
-        // program.
-        //
-        // Zeroing here rather than per batch keeps what that commit was after.
-        // The cost it removed was 4.4 MB per query on *every* batch -- 8.6 GB
-        // for 2048 queries, 40.8 ms against a 4.7 ms kernel; this pays it once
-        // per allocation, and the workspace is allocated once per process and
-        // grown only when a batch needs more states than the last one. It also
-        // subsumes the strided memset of sp_cleared that used to be here.
-        err = cudaMemset(grown_states, 0, states_bytes);
-        if (err != cudaSuccess) {
-            set_error("cudaMemset(query_states)", err);
-            cudaFree(grown_offsets);
-            cudaFree(grown_start_node_ids);
-            cudaFree(grown_start_offsets);
-            cudaFree(grown_results);
-            cudaFree(grown_states);
-            cudaFree(grown_lengths);
-            cudaFree(grown_traceback_meta);
-            status = Status::CudaError;
-            goto cleanup;
-        }
-        ALLOC_GROWN(grown_lengths, cap_per_query_i32_bytes, "cudaMalloc(lengths)");
-        ALLOC_GROWN(grown_traceback_meta, cap_meta_bytes,
-                    "cudaMalloc(traceback_meta)");
-#undef ALLOC_GROWN
-        if (workspace->offsets != nullptr) cudaFree(workspace->offsets);
-        if (workspace->start_node_ids != nullptr) cudaFree(workspace->start_node_ids);
-        if (workspace->start_offsets != nullptr) cudaFree(workspace->start_offsets);
-        if (workspace->results != nullptr) cudaFree(workspace->results);
-        if (workspace->states != nullptr) cudaFree(workspace->states);
-        if (workspace->lengths != nullptr) cudaFree(workspace->lengths);
-        if (workspace->traceback_meta != nullptr) cudaFree(workspace->traceback_meta);
-        workspace->offsets = d_offsets = grown_offsets;
-        workspace->start_node_ids = d_start_node_ids = grown_start_node_ids;
-        workspace->start_offsets = d_start_offsets = grown_start_offsets;
-        workspace->results = d_results = grown_results;
-        workspace->states = d_states = grown_states;
-        workspace->lengths = d_lengths = grown_lengths;
-        workspace->traceback_meta = d_traceback_meta = grown_traceback_meta;
-        workspace->batch_capacity = static_cast<size_t>(chunk_capacity);
-    }
-
-    cudaEventCreate(&ev_start);
-    cudaEventCreate(&ev_h2d);
-    cudaEventCreate(&ev_kernel);
-    cudaEventCreate(&ev_d2h);
-    if (ev_start != nullptr) {
-        cudaEventRecord(ev_start);
-    }
-
-    err = cudaMemcpy(d_chars, batch.chars, chars_bytes, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(chars H2D)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMemcpy(d_offsets, batch.offsets, offsets_bytes, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(offsets H2D)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMemcpy(d_start_node_ids, start_node_ids, per_query_i32_bytes, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(start_node_ids H2D)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMemcpy(d_start_offsets, start_offsets, per_query_i32_bytes, cudaMemcpyHostToDevice);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(start_offsets H2D)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    // The QueryState array is deliberately *not* zeroed here. It used to be, at
-    // 4.4 MB per query -- 8.8 GB of writes for a 2048-query batch, more than
-    // everything else in the H2D window put together and, at 40.8 ms against a
-    // 4.7 ms kernel, the largest single cost of a batch after the D2H.
-    //
-    // Nothing needs it. align_one establishes every scalar it reads
-    // (sp_init_window, sc_init, vd_init_scalar, bs_new_alignment, the cap_*
-    // diagnostics) and clears the two arrays that are indexed without a size --
-    // sp_off over the window and vd_vertex_to_idx over the graph. Every other
-    // array in the QueryState is append-only behind a counter that those calls
-    // set to zero: a cell of bs_m_wf beyond bs_m_wf_size, an InvalidSeg beyond
-    // vd_m_invalid_size[a], a Scope wavefront entry beyond sc_i_wf_size[s] is
-    // never read, and vd_activate_vertex zeroes a vertex's own counters the
-    // first time it becomes active.
-    //
-    // That is an argument, not a proof, so it is checked rather than trusted:
-    // compute-sanitizer --tool initcheck reports a read of uninitialised device
-    // memory, and the regression runs under it.
-
-    if (ev_h2d != nullptr) {
-        cudaEventRecord(ev_h2d);
-    }
-
-    blocks = (batch.num_seqs + threads_per_block - 1) / threads_per_block;
-
-    seq_length_kernel<<<blocks, threads_per_block>>>(d_offsets, batch.num_seqs, d_lengths);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        set_error("seq_length_kernel launch", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-
-    device_batch = BatchView{d_chars, d_offsets, batch.num_seqs};
+cudaError_t launch_align_batch(int32_t threads_per_block, const BatchView &batch,
+                               const GraphCsrView &graph,
+                               const int32_t *start_node_ids,
+                               const int32_t *start_offsets,
+                               AlignScoring scoring, QueryState *states,
+                               AlignResult *results) {
+    // One block per query, for the whole alignment.
     theseus_align_batch_kernel<<<batch.num_seqs, threads_per_block,
-                                         smem_bytes>>>(
-        device_batch, graph->view, d_start_node_ids, d_start_offsets, scoring,
-        d_states, d_results);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        set_error("theseus_align_batch_kernel launch", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaDeviceSynchronize();
-    if (err != cudaSuccess) {
-        set_error("theseus_align_batch_kernel synchronize", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    if (ev_kernel != nullptr) {
-        cudaEventRecord(ev_kernel);
-    }
-
-    traceback_meta_kernel<<<blocks, threads_per_block>>>(
-        d_states, batch.num_seqs, d_traceback_meta);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        set_error("traceback_meta_kernel launch", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-
-    err = cudaMemcpy(out_seq_lengths, d_lengths, lengths_bytes, cudaMemcpyDeviceToHost);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(lengths D2H)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    err = cudaMemcpy(out_results, d_results, results_bytes, cudaMemcpyDeviceToHost);
-    if (err != cudaSuccess) {
-        set_error("cudaMemcpy(results D2H)", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-    if (out_query_states != nullptr) {
-        std::vector<TracebackMeta> metadata(static_cast<size_t>(batch.num_seqs));
-        err = cudaMemcpy(metadata.data(), d_traceback_meta,
-                         sizeof(TracebackMeta) * metadata.size(),
-                         cudaMemcpyDeviceToHost);
-        if (err != cudaSuccess) {
-            set_error("cudaMemcpy(traceback metadata D2H)", err);
-            status = Status::CudaError;
-            goto cleanup;
-        }
-        CompactTracebackState *host_states =
-            static_cast<CompactTracebackState *>(out_query_states);
-        for (int32_t i = 0; i < batch.num_seqs; ++i) {
-            const TracebackMeta &meta = metadata[static_cast<size_t>(i)];
-            CompactTracebackState &host = host_states[i];
-            host.bs_m_wf_size = meta.m_size;
-            host.bs_m_jumps_wf_size = meta.m_jumps_size;
-            host.bs_i_jumps_wf_size = meta.i_jumps_size;
-            host.sc_peak_wf = meta.peak_wf;
-            host.capacity_exceeded = meta.capacity_exceeded != 0;
-            host.cap_reason = meta.cap_reason;
-            host.cap_required = meta.cap_required;
-            host.cap_available = meta.cap_available;
-        }
-        // Pack on the device, copy once. The layout is the exclusive prefix
-        // sum of the three sizes just read back, computed here and handed to
-        // the kernel, so host and device agree without a second scan.
-        size_t total_cells = 0;
-        std::vector<int32_t> base(static_cast<size_t>(batch.num_seqs));
-        for (int32_t i = 0; i < batch.num_seqs; ++i) {
-            base[static_cast<size_t>(i)] = static_cast<int32_t>(total_cells);
-            const TracebackMeta &meta = metadata[static_cast<size_t>(i)];
-            total_cells += static_cast<size_t>(meta.m_size) +
-                           static_cast<size_t>(meta.m_jumps_size) +
-                           static_cast<size_t>(meta.i_jumps_size);
-            if (total_cells > 0x7fffffffu) {
-                set_error("packed traceback exceeds 2^31 cells", cudaSuccess);
-                status = Status::CudaError;
-                goto cleanup;
-            }
-        }
-        {
-            const size_t cells = total_cells > 0 ? total_cells : 1;
-            if (workspace->packed_device_capacity < cells) {
-                cudaFree(workspace->packed_device);
-                workspace->packed_device = nullptr;
-                workspace->packed_device_capacity = 0;
-                err = cudaMalloc(&workspace->packed_device, sizeof(Cell) * cells);
-                if (err != cudaSuccess) {
-                    set_error("cudaMalloc(packed traceback)", err);
-                    status = Status::CudaError;
-                    goto cleanup;
-                }
-                workspace->packed_device_capacity = cells;
-            }
-            if (workspace->pack_offsets_capacity < static_cast<size_t>(batch.num_seqs)) {
-                cudaFree(workspace->pack_offsets);
-                workspace->pack_offsets = nullptr;
-                workspace->pack_offsets_capacity = 0;
-                err = cudaMalloc(&workspace->pack_offsets,
-                                 sizeof(int32_t) * static_cast<size_t>(batch.num_seqs));
-                if (err != cudaSuccess) {
-                    set_error("cudaMalloc(pack offsets)", err);
-                    status = Status::CudaError;
-                    goto cleanup;
-                }
-                workspace->pack_offsets_capacity = static_cast<size_t>(batch.num_seqs);
-            }
-            // Room for what earlier chunks already appended plus this chunk.
-            // The grow copies the existing prefix across rather than dropping
-            // it: those cells are this batch's results, and the caller has not
-            // seen them yet.
-            if (workspace->packed_host_capacity < *packed_host_used + total_cells) {
-                size_t want = workspace->packed_host_capacity * 2;
-                if (want < *packed_host_used + total_cells) {
-                    want = *packed_host_used + total_cells;
-                }
-                // Page-locked if it can be: this is the batch's whole traceback
-                // payload now, and the copy is the reason the buffer exists.
-                // Pageable is a correct fallback, only slower.
-                void *host_buffer = nullptr;
-                bool pinned = cudaHostAlloc(&host_buffer, sizeof(Cell) * want,
-                                            cudaHostAllocDefault) == cudaSuccess;
-                if (!pinned) {
-                    cudaGetLastError();   // the failed alloc is handled, not propagated
-                    host_buffer = std::malloc(sizeof(Cell) * want);
-                }
-                if (host_buffer == nullptr) {
-                    set_error("alloc(packed traceback host)", cudaErrorMemoryAllocation);
-                    status = Status::CudaError;
-                    goto cleanup;
-                }
-                if (workspace->packed_host != nullptr) {
-                    if (*packed_host_used > 0) {
-                        std::memcpy(host_buffer, workspace->packed_host,
-                                    sizeof(Cell) * (*packed_host_used));
-                    }
-                    if (workspace->packed_host_pinned) {
-                        cudaFreeHost(workspace->packed_host);
-                    } else {
-                        std::free(workspace->packed_host);
-                    }
-                }
-                workspace->packed_host = static_cast<Cell *>(host_buffer);
-                workspace->packed_host_pinned = pinned;
-                workspace->packed_host_capacity = want;
-            }
-
-            err = cudaMemcpy(workspace->pack_offsets, base.data(),
-                             sizeof(int32_t) * base.size(), cudaMemcpyHostToDevice);
-            if (err != cudaSuccess) {
-                set_error("cudaMemcpy(pack offsets H2D)", err);
-                status = Status::CudaError;
-                goto cleanup;
-            }
-            if (total_cells > 0) {
-                pack_traceback_kernel<<<batch.num_seqs, threads_per_block>>>(
-                    d_states, batch.num_seqs, workspace->pack_offsets,
-                    workspace->packed_device);
-                err = cudaGetLastError();
-                if (err != cudaSuccess) {
-                    set_error("pack_traceback_kernel launch", err);
-                    status = Status::CudaError;
-                    goto cleanup;
-                }
-                err = cudaMemcpy(workspace->packed_host + *packed_host_used,
-                                 workspace->packed_device,
-                                 sizeof(Cell) * total_cells, cudaMemcpyDeviceToHost);
-                if (err != cudaSuccess) {
-                    set_error("cudaMemcpy(packed traceback D2H)", err);
-                    status = Status::CudaError;
-                    goto cleanup;
-                }
-            }
-            // Offsets, not pointers: a later chunk may move the buffer.
-            // align_batch turns these into pointers once every chunk is in.
-            for (int32_t i = 0; i < batch.num_seqs; ++i) {
-                packed_cell_offsets->push_back(
-                    *packed_host_used + static_cast<size_t>(base[static_cast<size_t>(i)]));
-            }
-            *packed_host_used += total_cells;
-        }
-    }
-    if (ev_d2h != nullptr) {
-        cudaEventRecord(ev_d2h);
-        cudaEventSynchronize(ev_d2h);
-    }
-    if (ev_start != nullptr && ev_h2d != nullptr && ev_kernel != nullptr && ev_d2h != nullptr) {
-        // Accumulated, not assigned: a batch is one or more chunks and the
-        // caller is told what the whole batch cost.
-        float h2d = 0.0f, kernel = 0.0f, d2h = 0.0f, total = 0.0f;
-        cudaEventElapsedTime(&h2d, ev_start, ev_h2d);
-        cudaEventElapsedTime(&kernel, ev_h2d, ev_kernel);
-        cudaEventElapsedTime(&d2h, ev_kernel, ev_d2h);
-        cudaEventElapsedTime(&total, ev_start, ev_d2h);
-        timing->h2d_ms += h2d;
-        timing->kernel_ms += kernel;
-        timing->d2h_ms += d2h;
-        timing->end_to_end_ms += total;
-    }
-
-cleanup:
-    if (ev_start != nullptr) cudaEventDestroy(ev_start);
-    if (ev_h2d != nullptr) cudaEventDestroy(ev_h2d);
-    if (ev_kernel != nullptr) cudaEventDestroy(ev_kernel);
-    if (ev_d2h != nullptr) cudaEventDestroy(ev_d2h);
-    return status;
+                                 kernel_shared_bytes(threads_per_block)>>>(
+        batch, graph, start_node_ids, start_offsets, scoring, states, results);
+    return cudaGetLastError();
 }
 
-/**
- * @brief Queries one launch may hold, from what the device can actually spare.
- *
- * The QueryState array is the only part of the workspace that scales with the
- * batch -- 3.95 MB each against a few tens of bytes for everything else -- so
- * it alone decides how many queries fit, and no other term is worth modelling.
- *
- * The budget is the free memory plus whatever the state array already holds,
- * because that allocation is reusable rather than lost, minus a reserve for the
- * graph, the staging buffers, the context and fragmentation. Derived from
- * cudaMemGetInfo at call time, so it follows the device it is running on
- * instead of a constant tuned to one card.
- *
- * Never below what is already allocated: that memory is paid for. Never above
- * the batch: a batch that fits is still one launch, exactly as before.
- */
-static int32_t chunk_capacity_for(const DeviceWorkspace *workspace,
-                                  int32_t num_seqs) {
-    // Test hook. Chunking is only reachable on its own terms by a batch large
-    // enough to exhaust the device, which is an awkward thing to require of a
-    // regression run; forcing the size lets the same batch be put through one
-    // launch and through many and the two outputs compared directly. Ignored
-    // unless set to a positive number, so it costs a getenv per batch and
-    // changes nothing otherwise.
-    if (const char *forced = std::getenv("THESEUS_GPU_CHUNK")) {
-        const int value = std::atoi(forced);
-        if (value > 0) {
-            return value < num_seqs ? value : num_seqs;
-        }
-    }
-
-    const size_t state_bytes = sizeof(QueryState);
-    size_t free_bytes = 0, total_bytes = 0;
-    size_t budget = state_bytes;   // one query rather than a guess, if the query fails
-    if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess) {
-        const size_t committed = workspace->batch_capacity * state_bytes;
-        const size_t reserve = size_t{192} << 20;
-        const size_t pool = free_bytes + committed;
-        budget = pool > reserve ? pool - reserve : 0;
-    } else {
-        cudaGetLastError();   // handled, not propagated
-    }
-    size_t n = budget / state_bytes;
-    if (n < 1) {
-        n = 1;
-    }
-    if (n < workspace->batch_capacity) {
-        n = workspace->batch_capacity;
-    }
-    if (n > static_cast<size_t>(num_seqs)) {
-        n = static_cast<size_t>(num_seqs);
-    }
-    return static_cast<int32_t>(n);
+cudaError_t launch_traceback_meta(int32_t threads_per_block,
+                                  const QueryState *states, int32_t count,
+                                  TracebackMeta *metadata) {
+    const int blocks = (count + threads_per_block - 1) / threads_per_block;
+    traceback_meta_kernel<<<blocks, threads_per_block>>>(states, count, metadata);
+    return cudaGetLastError();
 }
 
-Status align_batch(const BatchView &batch,
-                   const DeviceGraph *graph,
-                   DeviceWorkspace *workspace,
-                   const int32_t *start_node_ids,
-                   const int32_t *start_offsets,
-                   AlignScoring scoring,
-                   AlignOptions options,
-                   AlignResult *out_results,
-                   void *out_query_states,
-                   int32_t *out_seq_lengths) {
-    clear_error();
-    g_last_timing = TimingReport{};
-
-    if (batch.num_seqs <= 0) {
-        return Status::NotImplemented;
-    }
-    if (graph == nullptr || workspace == nullptr) {
-        return Status::NoDevice;
-    }
-
-    const int32_t chunk = chunk_capacity_for(workspace, batch.num_seqs);
-
-    CompactTracebackState *host_states =
-        static_cast<CompactTracebackState *>(out_query_states);
-    size_t packed_host_used = 0;
-    std::vector<size_t> packed_cell_offsets;
-    if (host_states != nullptr) {
-        packed_cell_offsets.reserve(static_cast<size_t>(batch.num_seqs));
-    }
-
-    // Chunks are consumed in order and each writes its own slice of the output
-    // arrays, so the batch comes back in the caller's order whether it took one
-    // launch or twenty.
-    for (int32_t start = 0; start < batch.num_seqs; start += chunk) {
-        const int32_t n = (batch.num_seqs - start) < chunk ? (batch.num_seqs - start)
-                                                           : chunk;
-
-        // The kernel reads batch.offsets[query_id] and indexes batch.chars from
-        // it, so a chunk needs its offsets rebased to its own first character.
-        std::vector<int32_t> chunk_offsets(static_cast<size_t>(n) + 1);
-        const int32_t base_char = batch.offsets[start];
-        for (int32_t i = 0; i <= n; ++i) {
-            chunk_offsets[static_cast<size_t>(i)] = batch.offsets[start + i] - base_char;
-        }
-        const BatchView chunk_view{batch.chars + base_char, chunk_offsets.data(), n};
-
-        const Status status = align_chunk(
-            chunk_view, graph, workspace, start_node_ids + start,
-            start_offsets + start, scoring, options, out_results + start,
-            host_states != nullptr ? host_states + start : nullptr,
-            out_seq_lengths + start, chunk, &packed_host_used,
-            &packed_cell_offsets, &g_last_timing);
-        if (status != Status::Ok) {
-            return status;
-        }
-    }
-
-    // Every chunk has landed, so the staging buffer will not move again and the
-    // recorded offsets can become the pointers the caller reads.
-    if (host_states != nullptr) {
-        for (size_t i = 0; i < packed_cell_offsets.size(); ++i) {
-            CompactTracebackState &host = host_states[i];
-            const Cell *slice = workspace->packed_host + packed_cell_offsets[i];
-            host.bs_m_wf = slice;
-            host.bs_m_jumps_wf = slice + host.bs_m_wf_size;
-            host.bs_i_jumps_wf = slice + host.bs_m_wf_size +
-                                 host.bs_m_jumps_wf_size;
-        }
-    }
-    return Status::Ok;
+cudaError_t launch_pack_traceback(int32_t threads_per_block,
+                                  const QueryState *states, int32_t count,
+                                  const int32_t *base, Cell *packed) {
+    // One block per query: each gathers its own three prefixes.
+    pack_traceback_kernel<<<count, threads_per_block>>>(states, count, base,
+                                                        packed);
+    return cudaGetLastError();
 }
 
-DeviceGraph *upload_graph(const GraphCsrView &graph) {
-    clear_error();
-
-    int device_count = 0;
-    cudaError_t err = cudaGetDeviceCount(&device_count);
-    if (err != cudaSuccess || device_count == 0) {
-        set_error("cudaGetDeviceCount",
-                  err != cudaSuccess ? err : cudaErrorNoDevice);
-        return nullptr;
-    }
-
-    const int32_t num_vertices = graph.num_vertices;
-    const int32_t num_chars = graph.vertex_offsets[num_vertices];
-    const int32_t num_edges = graph.edge_offsets[num_vertices];
-
-    DeviceGraph *device_graph = new DeviceGraph();
-    device_graph->num_chars = num_chars;
-    device_graph->num_edges = num_edges;
-
-    const bool uploaded =
-        upload_array(&device_graph->vertex_chars, graph.vertex_chars,
-                     static_cast<size_t>(num_chars), "cudaMalloc/Memcpy(vertex_chars)") &&
-        upload_array(&device_graph->vertex_offsets, graph.vertex_offsets,
-                     static_cast<size_t>(num_vertices) + 1, "cudaMalloc/Memcpy(vertex_offsets)") &&
-        upload_array(&device_graph->edge_targets, graph.edge_targets,
-                     static_cast<size_t>(num_edges), "cudaMalloc/Memcpy(edge_targets)") &&
-        upload_array(&device_graph->edge_overlaps, graph.edge_overlaps,
-                     static_cast<size_t>(num_edges), "cudaMalloc/Memcpy(edge_overlaps)") &&
-        upload_array(&device_graph->edge_offsets, graph.edge_offsets,
-                     static_cast<size_t>(num_vertices) + 1, "cudaMalloc/Memcpy(edge_offsets)");
-
-    if (!uploaded) {
-        free_graph(device_graph);
-        return nullptr;
-    }
-
-    device_graph->view.vertex_chars = device_graph->vertex_chars;
-    device_graph->view.vertex_offsets = device_graph->vertex_offsets;
-    device_graph->view.edge_targets = device_graph->edge_targets;
-    device_graph->view.edge_overlaps = device_graph->edge_overlaps;
-    device_graph->view.edge_offsets = device_graph->edge_offsets;
-    device_graph->view.num_vertices = num_vertices;
-
-    return device_graph;
-}
-
-void free_graph(DeviceGraph *graph) {
-    if (graph == nullptr) {
-        return;
-    }
-    cudaFree(graph->vertex_chars);
-    cudaFree(graph->vertex_offsets);
-    cudaFree(graph->edge_targets);
-    cudaFree(graph->edge_overlaps);
-    cudaFree(graph->edge_offsets);
-    delete graph;
-}
-
-Status readback_graph(const DeviceGraph *graph,
-                      char *out_vertex_chars,
-                      int32_t *out_vertex_offsets,
-                      int32_t *out_edge_targets,
-                      int32_t *out_edge_overlaps,
-                      int32_t *out_edge_offsets) {
-    clear_error();
-
-    if (graph == nullptr) {
-        return Status::NoDevice;
-    }
-
-    const int32_t num_vertices = graph->view.num_vertices;
-    const int32_t num_chars = graph->num_chars;
-    const int32_t num_edges = graph->num_edges;
-
-    if (num_vertices <= 0) {
-        // Nothing to read back, and a zero-block launch is not a legal config.
-        return Status::Ok;
-    }
-
-    char *d_chars = nullptr;
-    int32_t *d_vertex_offsets = nullptr;
-    int32_t *d_edge_targets = nullptr;
-    int32_t *d_edge_overlaps = nullptr;
-    int32_t *d_edge_offsets = nullptr;
-    Status status = Status::Ok;
-    cudaError_t err = cudaSuccess;
-
-    // Single exit path: every allocation below is released at `cleanup`.
-    if (!alloc_output_array(&d_chars, static_cast<size_t>(num_chars),
-                            "cudaMalloc(readback chars)") ||
-        !alloc_output_array(&d_vertex_offsets, static_cast<size_t>(num_vertices) + 1,
-                            "cudaMalloc(readback vertex_offsets)") ||
-        !alloc_output_array(&d_edge_targets, static_cast<size_t>(num_edges),
-                            "cudaMalloc(readback edge_targets)") ||
-        !alloc_output_array(&d_edge_overlaps, static_cast<size_t>(num_edges),
-                            "cudaMalloc(readback edge_overlaps)") ||
-        !alloc_output_array(&d_edge_offsets, static_cast<size_t>(num_vertices) + 1,
-                            "cudaMalloc(readback edge_offsets)")) {
-        status = Status::CudaError;
-        goto cleanup;
-    }
-
-    graph_readback_kernel<<<num_vertices, 32>>>(graph->view, d_chars, d_vertex_offsets,
-                                                d_edge_targets, d_edge_overlaps,
-                                                d_edge_offsets);
-    err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        set_error("graph_readback_kernel launch", err);
-        status = Status::CudaError;
-        goto cleanup;
-    }
-
-    if (!download_array(out_vertex_chars, d_chars, static_cast<size_t>(num_chars),
-                        "cudaMemcpy(readback chars D2H)") ||
-        !download_array(out_vertex_offsets, d_vertex_offsets,
-                        static_cast<size_t>(num_vertices) + 1, "cudaMemcpy(readback vertex_offsets D2H)") ||
-        !download_array(out_edge_targets, d_edge_targets, static_cast<size_t>(num_edges),
-                        "cudaMemcpy(readback edge_targets D2H)") ||
-        !download_array(out_edge_overlaps, d_edge_overlaps, static_cast<size_t>(num_edges),
-                        "cudaMemcpy(readback edge_overlaps D2H)") ||
-        !download_array(out_edge_offsets, d_edge_offsets,
-                        static_cast<size_t>(num_vertices) + 1, "cudaMemcpy(readback edge_offsets D2H)")) {
-        status = Status::CudaError;
-        goto cleanup;
-    }
-
-cleanup:
-    cudaFree(d_chars);
-    cudaFree(d_vertex_offsets);
-    cudaFree(d_edge_targets);
-    cudaFree(d_edge_overlaps);
-    cudaFree(d_edge_offsets);
-    return status;
+cudaError_t launch_graph_readback(const GraphCsrView &graph,
+                                  char *out_vertex_chars,
+                                  int32_t *out_vertex_offsets,
+                                  int32_t *out_edge_targets,
+                                  int32_t *out_edge_overlaps,
+                                  int32_t *out_edge_offsets) {
+    // One block per vertex, 32 threads: a vertex's text and out-edge list are
+    // both short, and the traversal is the one the alignment kernel does.
+    graph_readback_kernel<<<graph.num_vertices, 32>>>(
+        graph, out_vertex_chars, out_vertex_offsets, out_edge_targets,
+        out_edge_overlaps, out_edge_offsets);
+    return cudaGetLastError();
 }
 
 }  // namespace gpu

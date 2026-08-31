@@ -12,8 +12,12 @@ option(THESEUS_PROXY_BUILD_APP "Build the seq2graph proxy app" ON)
 option(THESEUS_ENABLE_CUDA "Enable the CUDA alignment backend" OFF)
 option(THESEUS_PROXY_ENABLE_CUDA "Build the CUDA GPU backend (requires nvcc)" ${THESEUS_ENABLE_CUDA})
 
-# Only src/gpu/align_gpu.cu goes through nvcc: the rest of the library keeps
-# using the host compiler, and the two meet at the POD-only src/gpu/align_gpu.h.
+# Only src/gpu/*.cu goes through nvcc: the rest of the library keeps using the
+# host compiler, and the two meet at the POD-only src/gpu/align_gpu.h. Of the
+# four, align_gpu.cu is the one holding device code -- it is a single
+# translation unit on purpose, because the kernel's register count depends on
+# nvcc inlining the whole call chain into it. The other three are host code that
+# reaches the kernels through src/gpu/kernel_launch.h.
 if(THESEUS_PROXY_ENABLE_CUDA)
   enable_language(CUDA)
   if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
@@ -27,7 +31,11 @@ if(THESEUS_PROXY_ENABLE_CUDA)
     endif()
   endif()
   message(STATUS "theseus_proxy: CUDA backend ON, architectures: ${CMAKE_CUDA_ARCHITECTURES}")
-  set(THESEUS_PROXY_GPU_SOURCES src/gpu/align_gpu.cu)
+  set(THESEUS_PROXY_GPU_SOURCES
+    src/gpu/align_gpu.cu
+    src/gpu/align_batch.cu
+    src/gpu/device_memory.cu
+    src/gpu/gpu_error.cu)
 else()
   set(THESEUS_PROXY_GPU_SOURCES src/gpu/align_gpu_stub.cpp)
 endif()
@@ -52,8 +60,8 @@ target_include_directories(theseus_proxy
 )
 
 if(THESEUS_PROXY_ENABLE_CUDA)
-  # The .cu only includes the POD header, so it does not need C++20 and nvcc is
-  # spared the parts of the standard it handles worst.
+  # The .cu files only include the POD header, so they do not need C++20 and
+  # nvcc is spared the parts of the standard it handles worst.
   set_target_properties(theseus_proxy PROPERTIES
     CUDA_STANDARD 17
     CUDA_STANDARD_REQUIRED ON
