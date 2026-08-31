@@ -1,0 +1,4 @@
+GPU backend: threads/block 256; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.073536 kernel=939.108582 d2h=0.558688 total=939.740784
+GPU timing: h2d 0.073536 ms; kernel 939.109 ms; d2h 0.558688 ms; total 939.741 ms
+GPU host stages: prepare 0.015784 ms; graph 376.966 ms; host_buffers 1.88029 ms; cpu_verification 0 ms; traceback 0.114437 ms; alignment_construction 0.070692 ms; align_batch 1327.55 ms
+Application timing: graph_parse 3.23328 ms; input_parse 0.143165 ms; gaf_serialization 0.599901 ms; output_flush 0.005421 ms; total 1331.75 ms

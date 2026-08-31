@@ -1,0 +1,4 @@
+GPU backend: threads/block 256; aligned on device; GAF reconstructed from compact GPU state with host backtrace; timing_ms h2d=0.040800 kernel=946.985474 d2h=0.586368 total=947.612671; DEVICE QUERYSTATE CAPACITY EXCEEDED on query 15: active vertices needed 257, has 256
+GPU timing: h2d 0.0408 ms; kernel 946.985 ms; d2h 0.586368 ms; total 947.613 ms
+GPU host stages: prepare 0.037468 ms; graph 369.364 ms; host_buffers 1.49403 ms; cpu_verification 0 ms; traceback 0.255999 ms; alignment_construction 0.024562 ms; align_batch 1323.15 ms
+Application timing: graph_parse 217.877 ms; input_parse 0.075034 ms; gaf_serialization 0.501735 ms; output_flush 0.005962 ms; total 1541.81 ms

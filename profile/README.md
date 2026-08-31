@@ -1,6 +1,6 @@
 # Profili NVIDIA del porting GPU di Theseus
 
-Otto campagne di profiling su **Tesla T4** (CC 7.5), una per implementazione
+Quattordici campagne di profiling su **Tesla T4** (CC 7.5), una per implementazione
 del kernel `theseus_align_batch_kernel`, dalla versione naive a quella
 ottimizzata. Tutti i file di questa cartella sono **output diretto di `ncu`
 (Nsight Compute) e `nsys` (Nsight Systems)**, salvati come sono usciti: nessuna
@@ -23,6 +23,12 @@ l'ottimizzazione introdotta e il commit che la contiene:
 05-azzeramento-per-allocazione-7053193/     il memset una volta per allocazione
 06-coarsening-del-clear-02127db/            quattro parole per thread, int4
 07-densify-vuota-23dc718/                   densify senza barriere sul caso vuoto
+08-refactor-host-6e0b4f8/                   lo stato del blocco in diciotto __shared__
+09-blockshared-launchbounds-b375a77/        BlockShared + __launch_bounds__, la versione su main
+10-varianti-di-controllo/                   le due varianti che isolano i due cambiamenti
+11-grafo-yeast-49k-vertici/                 yeast, 49 410 nodi, 2048 query
+12-grafo-covid-39k-vertici/                 covid, 39 253 nodi, 64 query
+13-riferimento-grafi-giocattolo/            c4 ed ebola, misurati nella stessa sessione
 ```
 
 Ogni commit è raggiungibile da `main`: `git checkout <sha>` ricostruisce la
@@ -180,6 +186,54 @@ confrontabili con la campagna `01`.
 **Quindi: il meccanismo è dimostrato, il guadagno no.** Quello che serve per
 chiudere è un A/B con `cudaEvent` delle quattro varianti su entrambi i dataset,
 senza `ncu` di mezzo. Non è stato fatto.
+
+## 11-13 — I grafi ramificati
+
+Le prime dieci campagne misurano tutte lo stesso paio di grafi giocattolo: ebola
+ha 7 nodi, c4 ne ha 16. Queste tre aggiungono i due grafi che GGBS ha per
+stressare il branching, e la campagna `13` rimisura c4 ed ebola nella *stessa*
+sessione, così il confronto regge.
+
+| grafo | nodi | archi | nodi che ramificano | vertice più lungo |
+|---|---:|---:|---:|---:|
+| ebola | 7 | 8 | 2 | 9.068 |
+| c4 | 16 | 22 | 4 | 52.006 |
+| **covid** | **39.253** | **95.440** | **24.089** | 32 |
+| **yeast** | **49.410** | **67.320** | **17.713** | 5.184 |
+
+A 128 thread, stessa sessione, singolo lancio:
+
+| dataset | query | durata | occupancy | DRAM |
+|---|---:|---:|---:|---:|
+| `ebola_error_smoke` | 256 | 720 µs | 35,5 % | 9,5 % |
+| `c4_err` | 512 | 1.398 µs | 44,3 % | 37,9 % |
+| `yeast_exact` | 2048 | 7.089 µs | **49,3 %** | **56,6 %** |
+| `yeast_err` | 2048 | 11.914 µs | 47,2 % | 39,2 % |
+| `covid_exact_64` | 64 | 13.191 µs | **16,3 %** | **1,5 %** |
+| `covid_err_64` | 64 | 20.176 µs | 15,6 % | 1,3 % |
+
+Due cose che i grafi giocattolo non facevano vedere.
+
+**yeast è il caso in cui il kernel lavora meglio di sempre**: 49 % di occupancy e
+57 % della banda DRAM, contro il 35 % e il 9 % di ebola. Con 2048 blocchi e un
+grafo vero, la macchina è finalmente occupata.
+
+**covid è il contrario, ed è il risultato più interessante**: 64 query costano
+13 ms — venti volte c4_err, che ne fa 512 — con l'occupancy al 16 % e la DRAM
+all'1,5 %. Non è limitato dalla banda né dai warp residenti: è limitato dalla
+*divergenza*. 24 089 nodi che ramificano significano che i thread di uno stesso
+warp seguono cammini diversi quasi sempre, e la macchina gira quasi a vuoto. È
+esattamente la classe di problema per cui covid sta nel benchmark, e nessuna
+delle dieci campagne precedenti poteva vederla.
+
+**Nota sulla configurazione.** Queste tre campagne sono al commit `6d4adb4`, non
+alla testa di `main`: covid e yeast non girano con i bound di `main`, e le
+correzioni stanno sulla branch `covid-yeast` (vedi
+`theseus_gpu/data/validation/ggbs/README_covid_yeast.md`). In quella
+configurazione yeast è validato per intero — 2048 query, GAF byte-identico alla
+CPU a 64, 128 e 256 thread — mentre covid ha **una query su 64** che riporta
+`capacity exceeded` invece di allinearsi: dichiarato, non silenzioso, e senza
+effetto sui contatori delle altre 63.
 
 ## Avvertenze di lettura
 
