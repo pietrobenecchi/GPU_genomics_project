@@ -13,11 +13,6 @@ matches. On a graph a cell is `(query position, vertex, offset in the vertex)`,
 and a cell that reaches the last column of a vertex has to continue in *every*
 successor — the "jumps", which are the inherently ordered part of the work.
 
-On the GPU the mapping is **one CUDA block per query**: `threadIdx.x` is
-cooperation inside a single query, never a second query. The rule that governs
-every change is that `-b gpu` output stays **byte-identical** to the frozen CPU
-goldens.
-
 ---
 
 ## Build
