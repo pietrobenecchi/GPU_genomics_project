@@ -12,7 +12,7 @@
   ],
   "elapsed_seconds": 0.010713351002777927,
   "generated_at": "2026-08-13T09:58:48.499719+00:00",
-  "git_commit": "00ea1ef3e5e7772d21aabb4e27bc1e7fea861862",
+  "git_commit": "938f97297dff2fd2b29f3a2b2903fd3349e49faf",
   "golden_gaf": "theseus_gpu/data/validation/ggbs/golden/c4_exact_1k.cpu.gaf",
   "golden_gaf_sha256": "7966060c959bef14ce9537687061f0c13bd7e96cd175284637cb6516e624c473",
   "graph": "theseus_gpu/data/validation/ggbs/graphs/c4.gfa",

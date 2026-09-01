@@ -12,7 +12,7 @@
     "2048",
     "--overwrite"
   ],
-  "converter_git_commit": "c6e0fb2d2057629dbc94302801fcd3cad1374b6f",
+  "converter_git_commit": "e21073f175fd2f037d59af0b52fa3558f7239917",
   "converter_version": "ggbs-json-to-theseus-queries-v1",
   "invalid_records": [],
   "queries": [

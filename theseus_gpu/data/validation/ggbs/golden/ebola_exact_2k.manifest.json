@@ -12,7 +12,7 @@
   ],
   "elapsed_seconds": 0.0052366830059327185,
   "generated_at": "2026-08-13T09:58:48.680549+00:00",
-  "git_commit": "00ea1ef3e5e7772d21aabb4e27bc1e7fea861862",
+  "git_commit": "938f97297dff2fd2b29f3a2b2903fd3349e49faf",
   "golden_gaf": "theseus_gpu/data/validation/ggbs/golden/ebola_exact_2k.cpu.gaf",
   "golden_gaf_sha256": "8cbc426a0eba5c6c6b7e6f640050f657598629fe218ff95f2114986ffaba4f74",
   "graph": "theseus_gpu/data/validation/ggbs/graphs/ebola.gfa",

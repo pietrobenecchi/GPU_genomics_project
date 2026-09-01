@@ -12,7 +12,7 @@
     "1024",
     "--overwrite"
   ],
-  "converter_git_commit": "00ea1ef3e5e7772d21aabb4e27bc1e7fea861862",
+  "converter_git_commit": "938f97297dff2fd2b29f3a2b2903fd3349e49faf",
   "converter_version": "ggbs-json-to-theseus-queries-v1",
   "invalid_records": [],
   "queries": [
