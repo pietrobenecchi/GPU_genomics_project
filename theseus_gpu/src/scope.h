@@ -93,12 +93,9 @@ public:
         return false;
     }
 
-    /**
-     * @brief Largest capacity any wavefront has grown to.
-     *
-     * Equals the constructor's capacity until something outgrows it, so it doubles
-     * as the high-water mark to size a real bound from.
-     */
+    // La capacita' piu' grande raggiunta da un wavefront: resta quella del
+    // costruttore finche' qualcosa non la supera, quindi e' anche il picco da
+    // cui ricavare un bound vero.
     std::ptrdiff_t peak_capacity() const {
         std::ptrdiff_t peak = _initial_capacity;
         for (int i = 0; i < _squeue.size(); ++i) {
@@ -285,9 +282,7 @@ private:
             _d2_pos.resize(new_size);
         }
 
-        /**
-         * @brief Largest capacity across every buffer of this score.
-         */
+        // La capacita' piu' grande fra tutti i buffer di questo score.
         std::ptrdiff_t capacity() const {
             return std::max({_i_wf.capacity(), _d_wf.capacity(),
                              _i2_wf.capacity(), _d2_wf.capacity(),

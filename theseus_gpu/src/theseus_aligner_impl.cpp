@@ -69,9 +69,9 @@ bool TheseusAlignerImpl::host_batch_buffers(size_t queries,
                                             gpu::AlignResult **out_results,
                                             int32_t **out_lengths) {
     if (queries > _host_capacity) {
-        // Grow by reallocating rather than by extending: page-locked memory
-        // cannot be resized, and a batch larger than the last one is rare
-        // enough that one extra allocation is cheaper than tracking chunks.
+        // Cresce riallocando invece che estendendo: la memoria page-locked non si
+        // ridimensiona, e un batch piu' grande del precedente e' abbastanza raro
+        // che una allocazione in piu' costi meno che tenere il conto dei chunk.
         gpu::free_host_pinned(_host_states);
         gpu::free_host_pinned(_host_results);
         gpu::free_host_pinned(_host_lengths);
@@ -175,8 +175,8 @@ void TheseusAlignerImpl::new_alignment() {
     if (_qs->sp_max_diag < max_diag ||
         _qs->sp_min_diag > min_diag) {
         // TODO: Compute the max and min with a factor.
-        // Mirrors the CPU ScratchPad, which reallocated to exactly this window
-        // whenever either bound had to grow.
+        // Come la ScratchPad della CPU, che riallocava esattamente a questa
+        // finestra ogni volta che uno dei due estremi doveva crescere.
         sp_init(*_qs, min_diag, max_diag);
     }
 
@@ -310,8 +310,8 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // access_alloc + "keep the better offset", now one primitive because
-        // the offset and the payload live in two arrays.
+        // access_alloc piu' "tieni l'offset migliore", ora una primitiva sola
+        // perche' offset e payload stanno in due array separati.
         sp_merge_candidate(*_qs, new_cell);
       }
     }
@@ -344,8 +344,8 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // access_alloc + "keep the better offset", now one primitive because
-        // the offset and the payload live in two arrays.
+        // access_alloc piu' "tieni l'offset migliore", ora una primitiva sola
+        // perche' offset e payload stanno in due array separati.
         sp_merge_candidate(*_qs, new_cell);
       }
     }
@@ -375,8 +375,8 @@ Alignment TheseusAlignerImpl::align(
       // Check validity
       if (new_cell.offset <= m && new_col <= upper_bound)
       { // If in bounds
-        // access_alloc + "keep the better offset", now one primitive because
-        // the offset and the payload live in two arrays.
+        // access_alloc piu' "tieni l'offset migliore", ora una primitiva sola
+        // perche' offset e payload stanno in due array separati.
         sp_merge_candidate(*_qs, new_cell);
       }
     }

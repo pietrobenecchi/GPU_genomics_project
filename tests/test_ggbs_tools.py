@@ -113,7 +113,7 @@ class ConverterTests(unittest.TestCase):
         self.assertEqual([item["read_id"] for item in first], [item["read_id"] for item in second])
 
     def test_absent_offset_means_zero(self):
-        # vg omits protobuf defaults; the GGBS position CSVs list these reads at 0.
+        # vg omette i default protobuf; i CSV GGBS elencano queste read a 0.
         rec = self.record(path={"mapping": [{"position": {"node_id": "1"}}]})
         self.run_convert([rec])
         self.assertEqual((self.root / "out.queries").read_text(), ">1 0 +\nACGT\n")
@@ -178,14 +178,14 @@ class GoldenReferenceTests(unittest.TestCase):
     def test_backend_flag_can_be_omitted_for_the_oracle(self):
         command = golden.build_command(self.args("--no-backend-flag"))
         self.assertNotIn("--backend", command)
-        # The rest of the invocation is unchanged.
+        # Il resto dell'invocazione non cambia.
         for flag in ("-g", "-s", "-f"):
             self.assertIn(flag, command)
 
     def test_confirm_regeneration_clears_the_guard(self):
         self.gaf.write_text("ORIGINAL\n", encoding="utf-8")
-        # Past the guard the runner reaches the binary, which does not exist
-        # here: that failure is the proof the guard no longer blocks.
+        # Passata la guardia il runner arriva al binario, che qui non esiste:
+        # quel fallimento e' la prova che la guardia non blocca piu'.
         with self.assertRaises(FileNotFoundError):
             golden.run(self.args("--confirm-regeneration"))
 

@@ -3,55 +3,36 @@
 #include <cstddef>
 #include <cstdint>
 
-/**
- * @file align_gpu.h
- * @brief Boundary between the C++20 aligner and the CUDA backend.
- *
- * This header is compiled by both the host compiler and nvcc, so it must stay
- * free of CUDA types and of anything the two toolchains could disagree on:
- * POD types and free functions only.
- */
+// Confine fra l'aligner C++ e il backend CUDA.
+// Lo compilano sia il compilatore host sia nvcc, quindi qui stanno solo tipi
+// POD e funzioni libere: nessun tipo CUDA.
 
 namespace theseus {
 namespace gpu {
 
-/**
- * @brief Flat view over a batch of query sequences.
- *
- * The concatenated layout is what a kernel can consume directly: a single
- * upload for the whole batch instead of one transfer per query.
- */
+// Vista piatta su un batch di query: sequenze concatenate piu' gli offset.
+// Layout che il kernel legge direttamente e che fa salire tutto il batch con
+// un solo transfer invece di uno per query.
 struct BatchView {
-    const char *chars;       // Concatenated sequences, no separators
-    const int32_t *offsets;  // num_seqs + 1 entries; sequence i is [offsets[i], offsets[i + 1])
+    const char *chars;       // Sequenze concatenate, senza separatori
+    const int32_t *offsets;  // num_seqs + 1 entry; la sequenza i e' [offsets[i], offsets[i + 1])
     int32_t num_seqs;
 };
 
-/**
- * @brief Flat CSR view of the reference graph.
- *
- * Only what the alignment kernel reads is here: vertex texts and outgoing
- * edges. Vertex names and in-edges never reach the device, they exist solely
- * for GAF and GFA output on the host.
- */
+// Grafo in CSR, con solo cio' che il kernel legge: testo dei vertici e archi
+// uscenti. Nomi e in-edges restano sull'host, servono per l'output GAF/GFA.
 struct GraphCsrView {
-    const char *vertex_chars;      // Concatenated vertex texts, no separators
+    const char *vertex_chars;      // Testi dei vertici concatenati, senza separatori
     const int32_t *vertex_offsets; // num_vertices + 1; text of vertex v is [off[v], off[v + 1])
-    const int32_t *edge_targets;   // Destination vertex of each out-edge
-    const int32_t *edge_overlaps;  // Overlap length, parallel to edge_targets
+    const int32_t *edge_targets;   // Vertice di destinazione di ogni arco uscente
+    const int32_t *edge_overlaps;  // Lunghezza dell'overlap, parallelo a edge_targets
     const int32_t *edge_offsets;   // num_vertices + 1; out-edges of v are [off[v], off[v + 1])
     int32_t num_vertices;
 };
 
-/**
- * @brief POD result slot written by one alignment thread.
- *
- * This is deliberately independent from Cell and Alignment: the CUDA boundary
- * only carries primitive fields, while the host reconstructs richer C++ objects
- * after copying results back. end_* mirrors the terminal Cell selected by the
- * wavefront search. from_matrix uses Cell::Matrix's numeric values without
- * including cell.h here, keeping this header free of host-only dependencies.
- */
+// Slot di risultato POD, uno per query. Volutamente separato da Cell e
+// Alignment: sul confine CUDA passano solo campi primitivi, gli oggetti C++ li
+// ricostruisce l'host. I campi end_* sono la Cell finale scelta dal wavefront.
 struct AlignResult {
     int32_t score;
     int32_t end_vertex_id;
@@ -64,9 +45,7 @@ struct AlignResult {
     int8_t reserved;
 };
 
-/**
- * @brief Internal alignment penalties in POD form for CUDA kernels.
- */
+// Penalita' di allineamento in forma POD, come le vuole il kernel.
 struct AlignScoring {
     int32_t mism;
     int32_t gapo;
@@ -87,21 +66,17 @@ struct TimingReport {
     float end_to_end_ms = 0.0f;
 };
 
-/**
- * @brief Opaque handle to the graph as it lives in device memory.
- *
- * Defined only inside the CUDA backend: the host side never looks inside it,
- * which is what keeps CUDA types out of code compiled by the host compiler.
- */
+// Handle opachi alle allocazioni device. Definiti solo dentro il backend, cosi'
+// il codice compilato dall'host non vede mai un tipo CUDA.
 struct DeviceGraph;
 struct DeviceWorkspace;
 
 enum class Status {
-    Ok,              // Batch aligned on the device
+    Ok,              // Batch allineato sul device
     NotImplemented,  // Device reachable, but this build cannot run the requested GPU path
-    NoDevice,        // Built with CUDA, but no usable device at runtime
-    NotCompiled,     // Built without the CUDA backend
-    CudaError,       // A CUDA call failed, see last_error()
+    NoDevice,        // Compilato con CUDA, ma a runtime nessun device usabile
+    NotCompiled,     // Compilato senza il backend CUDA
+    CudaError,       // Una chiamata CUDA e' fallita, vedi last_error()
 };
 
 inline const char *status_message(Status s) {
@@ -120,31 +95,14 @@ inline const char *status_message(Status s) {
     return "unknown status";
 }
 
-/**
- * @brief Description of the last CUDA failure, or "" if none.
- */
+// Descrizione dell'ultimo errore CUDA, "" se non ce n'e' stato nessuno.
 const char *last_error();
 
 const TimingReport &last_timing();
 
-/**
- * @brief Align a batch of queries on the device.
- *
- * Uploads @p batch and launches one block per query, each block running a
- * complete Theseus alignment over its own QueryState. @p out_seq_lengths
- * receives each sequence length as computed on the device, which lets the caller
- * verify the upload against host-side data.
- *
- * @param batch             Sequences to align
- * @param graph             Graph already uploaded to device memory
- * @param start_node_ids    Host array of batch.num_seqs numeric start vertices
- * @param start_offsets     Host array of batch.num_seqs start offsets
- * @param scoring           Internal penalties and Scope ring size
- * @param out_results       Caller-owned buffer of batch.num_seqs result slots
- * @param out_query_states  Caller-owned CompactTracebackState buffer
- * @param out_seq_lengths   Caller-owned buffer of batch.num_seqs entries
- * @return Status           Ok only when the alignment itself ran on the device
- */
+// Allinea un batch sul device: un blocco per query, ognuno con la sua
+// QueryState. out_seq_lengths riporta le lunghezze calcolate sul device, cosi'
+// il chiamante puo' verificare l'upload. Ok solo se ha girato davvero la GPU.
 Status align_batch(const BatchView &batch,
                    const DeviceGraph *graph,
                    DeviceWorkspace *workspace,
@@ -159,52 +117,23 @@ Status align_batch(const BatchView &batch,
 DeviceWorkspace *create_workspace();
 void free_workspace(DeviceWorkspace *workspace);
 
-/**
- * @brief Page-locked host memory, for buffers the device copies into.
- *
- * The compact traceback state is the batch's whole D2H payload -- 288 KB per
- * query, 590 MB for 2048 -- and a freshly allocated pageable buffer pays a page
- * fault per page on the way in, on top of the staging copy the driver has to
- * make because it cannot DMA into pageable memory. Allocating it once, page
- * locked, and keeping it for the aligner's lifetime removes both.
- *
- * The size is in bytes and the contents are not initialised: align_batch
- * overwrites every buffer it is given. free_host_pinned accepts nullptr. On a
- * build without CUDA these fall back to malloc/free, so the caller needs no
- * second path.
- *
- * @return Page-locked buffer, or nullptr if the allocation failed
- */
+// Memoria host page-locked per i buffer che il device riempie: il traceback e'
+// tutto il payload D2H e un buffer pageable pagherebbe page fault piu' staging.
+// Allocata una volta per la vita dell'aligner. Senza CUDA ricade su malloc/free.
 void *alloc_host_pinned(size_t bytes);
 void free_host_pinned(void *buffer);
 
-/**
- * @brief Copy the graph to device memory, once.
- *
- * The graph is read-only and shared by every query, so it is uploaded one time
- * and kept for the lifetime of the aligner rather than sent per batch.
- *
- * @param graph  CSR over host memory
- * @return       Handle to free with free_graph(), or nullptr on failure (see last_error())
- */
+// Copia il grafo in memoria device una volta sola: e' read-only e condiviso da
+// tutte le query, quindi non si rimanda a ogni batch.
+// Ritorna un handle da liberare con free_graph(), nullptr se fallisce.
 DeviceGraph *upload_graph(const GraphCsrView &graph);
 
-/**
- * @brief Release a graph obtained from upload_graph(). Accepts nullptr.
- */
+// Libera un grafo ottenuto da upload_graph(). Accetta nullptr.
 void free_graph(DeviceGraph *graph);
 
-/**
- * @brief Read the uploaded graph back out of device memory.
- *
- * The copy is made by a kernel that walks the CSR the same way the alignment
- * kernel will, so a mismatch means device code cannot traverse the graph, not
- * merely that some bytes moved wrong. Every buffer must be sized as the CSR
- * that was uploaded.
- *
- * @param graph  Handle from upload_graph()
- * @return       Ok when the readback ran, whatever the contents turn out to be
- */
+// Rilegge il grafo dalla memoria device. La copia la fa un kernel che percorre
+// il CSR come fara' il kernel di allineamento: se non torna, il problema e' la
+// traversata sul device, non solo dei byte copiati male.
 Status readback_graph(const DeviceGraph *graph,
                       char *out_vertex_chars,
                       int32_t *out_vertex_offsets,

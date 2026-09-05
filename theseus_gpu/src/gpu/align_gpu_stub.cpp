@@ -1,8 +1,5 @@
-/**
- * @file align_gpu_stub.cpp
- * @brief Backend used when the project is built without CUDA, so that
- * theseus_proxy links and runs identically on machines without nvcc.
- */
+// Backend usato quando si compila senza CUDA, cosi' theseus_proxy linka e gira
+// uguale anche su macchine senza nvcc (con fallback CPU).
 
 #include "gpu/align_gpu.h"
 
@@ -26,8 +23,8 @@ Status align_batch(const BatchView &, const DeviceGraph *, DeviceWorkspace *, co
 DeviceWorkspace *create_workspace() { return nullptr; }
 void free_workspace(DeviceWorkspace *) {}
 
-// No device, so nothing to page-lock for: plain host memory has the same
-// contract and the caller cannot tell the difference.
+// Niente device, niente da page-lockare: la memoria host normale ha lo stesso
+// contratto e il chiamante non vede differenza.
 void *alloc_host_pinned(size_t bytes) { return std::malloc(bytes); }
 void free_host_pinned(void *buffer) { std::free(buffer); }
 

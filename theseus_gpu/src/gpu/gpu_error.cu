@@ -1,10 +1,6 @@
-/**
- * @file gpu_error.cu
- * @brief Storage for the error slot declared in gpu_error.h.
- *
- * The buffer is file-local: set_error, clear_error and last_error are the only
- * three things that touch it, and they all live here.
- */
+// Storage dello slot d'errore dichiarato in gpu_error.h.
+// Il buffer e' file-local: lo toccano solo set_error, clear_error e
+// last_error, che stanno tutte qui.
 
 #include "gpu/gpu_error.h"
 #include "gpu/align_gpu.h"

@@ -1,11 +1,6 @@
-/**
- * @file device_memory.cu
- * @brief Device allocations that outlive a single batch: the graph and the
- * workspace.
- *
- * Everything here is CUDA runtime calls and bookkeeping -- no kernel is written
- * in this file, and the one it launches it reaches through kernel_launch.h.
- */
+// Allocazioni device che sopravvivono al singolo batch: grafo e workspace.
+// Qui ci sono solo chiamate al runtime CUDA e contabilita': nessun kernel e'
+// scritto in questo file, l'unico che lancia passa da kernel_launch.h.
 
 #include "gpu/device_memory.h"
 #include "gpu/gpu_error.h"
@@ -21,11 +16,8 @@ namespace gpu {
 
 namespace {
 
-/**
- * @brief cudaMalloc + H2D for one array. A zero-length array yields a null
- * device pointer, which the kernels never dereference because the matching
- * offset range is empty.
- */
+// cudaMalloc + H2D di un array. Un array vuoto da' un puntatore nullo, che i
+// kernel non dereferenziano mai perche' il range di offset corrispondente e' vuoto.
 template <typename T>
 bool upload_array(T **device_ptr, const T *host_ptr, size_t count,
                   const char *what) {
@@ -48,14 +40,9 @@ bool upload_array(T **device_ptr, const T *host_ptr, size_t count,
     return true;
 }
 
-/**
- * @brief cudaMalloc for an output array, filled with a sentinel.
- *
- * The sentinel matters: an output buffer must never be seeded with the values
- * the caller expects, or a kernel that writes nothing at all would still
- * compare equal. Anything the kernel skips comes back as 0xFF bytes and fails
- * the comparison loudly.
- */
+// cudaMalloc di un array di output, riempito con un sentinella 0xFF.
+// Il sentinella serve: se il buffer partisse gia' con i valori attesi, un
+// kernel che non scrive niente risulterebbe comunque uguale al riferimento.
 template <typename T>
 bool alloc_output_array(T **device_ptr, size_t count, const char *what) {
     *device_ptr = nullptr;
@@ -77,9 +64,7 @@ bool alloc_output_array(T **device_ptr, size_t count, const char *what) {
     return true;
 }
 
-/**
- * @brief D2H for one array.
- */
+// D2H di un array.
 template <typename T>
 bool download_array(T *host_ptr, const T *device_ptr, size_t count,
                     const char *what) {
@@ -96,13 +81,9 @@ bool download_array(T *host_ptr, const T *device_ptr, size_t count,
     return true;
 }
 
-/**
- * @brief The per-query arrays of a workspace, as one set.
- *
- * A grow allocates seven buffers and has to undo all of them if any one fails,
- * which is what the ALLOC_GROWN macro this replaces was for. Holding them in a
- * struct with a release() lets each failure site say what it means once.
- */
+// Gli array per-query del workspace, tenuti insieme.
+// Una crescita alloca sette buffer e deve disfarli tutti se uno solo fallisce:
+// raggrupparli con una release() evita di ripetere la pulizia a ogni errore.
 struct GrownArrays {
     int32_t *offsets = nullptr;
     int32_t *start_node_ids = nullptr;
@@ -112,7 +93,7 @@ struct GrownArrays {
     int32_t *lengths = nullptr;
     TracebackMeta *traceback_meta = nullptr;
 
-    /** @brief Give back whatever was allocated. cudaFree(nullptr) is a no-op. */
+    // Restituisce quello che era stato allocato. cudaFree(nullptr) non fa nulla.
     void release() {
         cudaFree(offsets);
         cudaFree(start_node_ids);
@@ -124,7 +105,7 @@ struct GrownArrays {
     }
 };
 
-/** @brief cudaMalloc @p bytes into @p ptr, recording @p label if it fails. */
+// cudaMalloc di bytes in ptr, registrando label nello slot d'errore se fallisce.
 template <typename T>
 bool grow(T **ptr, size_t bytes, const char *label) {
     const cudaError_t err = cudaMalloc(ptr, bytes);
@@ -196,18 +177,13 @@ Status ensure_workspace_capacity(DeviceWorkspace *workspace,
         return Status::Ok;
     }
 
-    // Allocation sizes, as opposed to the copy sizes above. Every per-query
-    // buffer is allocated for a full chunk even when this chunk is short, which
-    // the last chunk of a batch always is: the capacity test below is what
-    // decides whether to reallocate, so sizing the arrays on one short chunk
-    // would leave them too small for the next full one while the test still
-    // said the workspace was big enough.
+    // Dimensioni di allocazione, non di copia: ogni buffer per-query si alloca
+    // per un chunk pieno anche quando questo e' corto (l'ultimo lo e' sempre).
+    // Altrimenti resta piccolo per il prossimo e il test di capacita' non se ne accorge.
     const size_t cap_q = static_cast<size_t>(chunk_capacity);
-    // The one buffer sized on the chunk capacity rather than on this chunk's
-    // query count: it is the largest thing in the workspace by three orders of
-    // magnitude, and keeping it at the capacity is what lets every chunk reuse
-    // the same allocation (and the same one-off zeroing) instead of
-    // reallocating per chunk.
+    // L'array delle QueryState e' tre ordini di grandezza sopra tutto il resto:
+    // tenerlo alla capacita' del chunk fa riusare a ogni chunk la stessa
+    // allocazione, e lo stesso azzeramento una tantum.
     const size_t states_bytes = sizeof(QueryState) * cap_q;
 
     GrownArrays grown;
@@ -224,36 +200,12 @@ Status ensure_workspace_capacity(DeviceWorkspace *workspace,
         return Status::CudaError;
     }
 
-        // cudaMalloc does not zero, and two things need it to be zero.
-        //
-        // sp_cleared has to read as 0 -- "no entry of sp_off has been cleared
-        // yet" -- on a state's first use, or the first query would skip a clear
-        // it still needs.
-        //
-        // And the argument that nothing else needs zeroing turned out to be
-        // wrong. The commit that dropped the per-batch cudaMemset said it was
-        // "an argument, not a proof, so it is checked rather than trusted";
-        // checking it says no: on ebola_exact_smoke, 8 queries, initcheck
-        // reports 73 758 reads of uninitialised device memory, all of them the
-        // same site once deduplicated --
-        //
-        //     core_check_end            align_core.h:39
-        //     core_extend_diagonal      align_core.h:281
-        //     align_one                 align_gpu.cu:1149   the score-0 seed
-        //
-        // -- and every commit after it inherits them, while the commit before
-        // it is clean. The reads have never changed a result: all ten datasets
-        // match their golden byte for byte at 64, 128 and 256 threads. But a
-        // value read out of memory nobody wrote is whatever the last tenant of
-        // that DRAM left, so "it matched" is a property of one run, not of the
-        // program.
-        //
-        // Zeroing here rather than per batch keeps what that commit was after.
-        // The cost it removed was 4.4 MB per query on *every* batch -- 8.6 GB
-        // for 2048 queries, 40.8 ms against a 4.7 ms kernel; this pays it once
-        // per allocation, and the workspace is allocated once per process and
-        // grown only when a batch needs more states than the last one. It also
-        // subsumes the strided memset of sp_cleared that used to be here.
+    // cudaMalloc non azzera e sp_cleared deve leggersi 0 al primo uso: senza
+    // memset initcheck segnala 73 758 letture non inizializzate su 8 query. La
+    // regressione passa comunque, non toglierlo senza rilanciare initcheck.
+
+    // Si azzera una volta per allocazione, non per batch: per batch costava
+    // 4.4 MB per query, 8.6 GB e 40.8 ms su 2048, contro un kernel da 4.7 ms.
     const cudaError_t err = cudaMemset(grown.states, 0, states_bytes);
     if (err != cudaSuccess) {
         set_error("cudaMemset(query_states)", err);
@@ -361,7 +313,7 @@ Status readback_graph(const DeviceGraph *graph,
     const int32_t num_edges = graph->num_edges;
 
     if (num_vertices <= 0) {
-        // Nothing to read back, and a zero-block launch is not a legal config.
+        // Niente da rileggere, e un lancio con zero blocchi non e' valido.
         return Status::Ok;
     }
 
@@ -373,7 +325,7 @@ Status readback_graph(const DeviceGraph *graph,
     Status status = Status::Ok;
     cudaError_t err = cudaSuccess;
 
-    // Single exit path: every allocation below is released at `cleanup`.
+    // Unica via d'uscita: tutte le allocazioni qui sotto si liberano in `cleanup`.
     if (!alloc_output_array(&d_chars, static_cast<size_t>(num_chars),
                             "cudaMalloc(readback chars)") ||
         !alloc_output_array(&d_vertex_offsets, static_cast<size_t>(num_vertices) + 1,

@@ -21,16 +21,16 @@ def main() -> int:
     with open(path, errors="replace") as handle:
         text = handle.read()
 
-    # One chunk per entry function; the numbers for a kernel are the ones
-    # between its "Compiling entry function" line and the next.
+    # Un blocco per entry function: i numeri di un kernel sono quelli fra la sua
+    # riga "Compiling entry function" e la successiva.
     chunks = re.split(r"ptxas info\s*:\s*Compiling entry function", text)
     target = next((c for c in chunks[1:] if wanted in c.split("\n", 1)[0]), None)
     if target is None:
         return 1
 
-    # Stop at the first *other* function's properties: a kernel's own frame is
-    # the one whose "Function properties for" names the kernel itself, and the
-    # __noinline__ callees that follow report their frames separately.
+    # Ci si ferma alle properties della prima funzione *diversa*: il frame di un
+    # kernel e' quello il cui "Function properties for" nomina il kernel stesso,
+    # e i callee __noinline__ che seguono riportano i loro a parte.
     head = target
     props = re.split(r"ptxas info\s*:\s*Function properties for ", target)
     own = next((p for p in props[1:] if wanted in p.split("\n", 1)[0]), "")

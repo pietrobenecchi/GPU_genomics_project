@@ -11,34 +11,23 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-# Threads per block the kernel accepts. The kernel itself no longer has
-# variants: the one-thread-per-query config 0 lives on the legacy/config0
-# branch and is not built here.
+# Thread per blocco che il kernel accetta. Di configurazioni non ce n'e' piu' che
+# una: quella a un thread per query resta al commit a1a44b7, qui non si compila.
 THREAD_COUNTS = [64, 128, 256]
 
-# Datasets carry two independent labels.
-#
-# `tier` is what the read demands of the aligner:
-#
-#   simple  - every read matches its graph window exactly, so the seed extension
-#             reaches the end of the query at score 0 and the Scope is never used.
-#   complex - reads carry sequencing errors, so the alignment needs at least one
-#             wavefront at a non-zero score. This is the tier that exercises the
-#             fixed capacities in query_state.h.
-#
-# `size` is how much work the batch is, for the profiling campaign:
-#
-#   small   - the frozen correctness workloads (256 / 512 queries)
-#   medium  - 1024 queries
-#   large   - 2048 queries, the largest that fits one launch on a 16 GB device
-#             (one QueryState is 4.2 MB, so 2048 of them are 8.6 GB)
-#
-# The medium and large sets are *not* synthetic: they are the same GGBS JSON
-# read the small ones come from, converted with a larger --limit. Since --limit
-# keeps the first N records in file order, each small set is a byte-exact prefix
-# of its medium and large counterparts, and so is its golden. Every one of them
-# has its own frozen CPU golden from the same oracle, so they are full
-# correctness workloads, not performance-only fixtures.
+# Ogni dataset porta due etichette indipendenti.
+
+# `tier` e' quello che la read chiede all'aligner: simple, dove combacia esatta e
+# il seed arriva in fondo a score 0 senza usare lo Scope; complex, dove porta
+# errori e serve almeno un wavefront a score non nullo.
+
+# `size` e' quanto lavoro fa il batch: small sono i workload di correttezza
+# congelati (256/512 query), medium 1024, large 2048 -- il massimo che sta in un
+# lancio su 16 GB, visto che una QueryState e' 4,2 MB.
+
+# I set medium e large non sono sintetici: stessa JSON GGBS, --limit piu' grande.
+# --limit tiene i primi N record in ordine di file, quindi ogni small e' un
+# prefisso esatto dei suoi, golden compreso, e ognuno ha il suo golden CPU.
 DATASETS = {
     "ebola_exact_smoke": {
         "tier": "simple",
@@ -104,9 +93,9 @@ DATASETS = {
         "metadata": "theseus_gpu/data/validation/ggbs/truth/c4_err_2k.metadata.json",
         "golden": "theseus_gpu/data/validation/ggbs/golden/c4_err_2k.cpu.gaf",
     },
-    # Same query count as the c4 large pair, but the ScratchPad window is sized
-    # by the graph's longest vertex: 9 063 on ebola against 52 006 on c4, so the
-    # per-query clear is 5.7x smaller and the phase mix shifts away from it.
+    # Stesso numero di query della coppia c4 large, ma la finestra della
+    # ScratchPad la fissa il vertice piu' lungo: 9 063 su ebola contro 52 006 su
+    # c4, quindi il clear per query e' 5,7 volte piu' piccolo.
     "ebola_exact_2k": {
         "tier": "simple",
         "size": "large",
@@ -284,9 +273,9 @@ def run_kernel(
     timeout: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [str(binary), "--backend", "gpu"]
-    # Without this the backend falls back to the CPU when the kernel result is
-    # unusable and still writes correct alignments, so the GAF compares equal to
-    # the golden and the run looks like a pass.
+    # Senza questo il backend ricade sulla CPU quando il risultato del kernel e'
+    # inservibile e scrive comunque allineamenti giusti: il GAF combacia col
+    # golden e il run sembra passato.
     command += ["--require-gpu-result"]
     if threads is not None:
         command += ["--gpu-threads", str(threads)]
@@ -314,8 +303,8 @@ def check_device(args: argparse.Namespace) -> None:
     validator = args.build_dir / "apps" / "seq2graph_gpu_validate"
     if not args.require_device:
         return
-    # A missing validator used to skip this check silently, which let the
-    # regression "pass" on a machine with no GPU at all.
+    # Un validator mancante saltava questo controllo in silenzio, e la
+    # regressione "passava" su una macchina senza nessuna GPU.
     if not validator.exists():
         raise RuntimeError(
             f"--require-device is set but the validator binary is missing: {validator}\n"

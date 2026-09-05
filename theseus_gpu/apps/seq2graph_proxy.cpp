@@ -28,7 +28,7 @@ struct CmdArgs {
   int repeat = 1;
 };
 
-// Sequences to align, together with where each one starts in the graph.
+// Le sequenze da allineare e dove ognuna comincia nel grafo.
 struct Inputs {
   std::vector<std::string> sequences;
   std::vector<std::string> start_vertices;
@@ -206,9 +206,7 @@ void read_seq_pos_data(std::ifstream &sp_file, Inputs &inputs) {
   }
 }
 
-/**
- * @brief Align every sequence on the CPU, one at a time.
- */
+// Allinea ogni sequenza sulla CPU, una alla volta.
 void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
              std::ostream &out_stream) {
   for (size_t i = 0; i < inputs.sequences.size(); ++i) {
@@ -218,23 +216,17 @@ void run_cpu(theseus::TheseusAligner &aligner, Inputs &inputs,
   }
 }
 
-/**
- * @brief Align the whole batch through the GPU backend.
- *
- * The backend falls back to the CPU when it cannot do the work, so the status it
- * reports is written to stderr rather than assumed.
- */
+// Allinea tutto il batch col backend GPU. Ricade sulla CPU quando non ce la fa,
+// quindi lo stato che riporta si stampa su stderr invece di darlo per buono.
 bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
              std::ostream &out_stream, int gpu_threads,
              bool require_gpu_result, bool verify_gpu_with_cpu,
              double &serialization_ms, int repeat) {
   theseus::GpuBatchReport report;
   std::vector<theseus::Alignment> alignments;
-  // Every iteration aligns the same batch through the same aligner, so the
-  // first one carries the per-process costs (CUDA context, graph upload, page
-  // locking the host buffers) and the later ones do not. Each prints its own
-  // timing line; the alignments kept are the last iteration's, and they are the
-  // same alignments every time.
+  // Ogni giro allinea lo stesso batch con lo stesso aligner, quindi il primo si
+  // porta i costi per processo (contesto CUDA, upload del grafo, page lock) e i
+  // successivi no. Si tengono gli allineamenti dell'ultimo giro, sempre uguali.
   for (int iteration = 0; iteration < repeat; ++iteration) {
     if (repeat > 1) {
       std::cerr << "GPU iteration " << iteration << "\n";
@@ -267,8 +259,8 @@ bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
 
   std::cerr << "GPU backend: " << report.message << "\n";
 
-  // Printed on its own line so a before/after comparison needs nothing beyond
-  // the run the regression already performs.
+  // Stampato su una riga sua, cosi' un confronto prima/dopo non chiede altro che
+  // il run che la regressione fa gia'.
   if (report.device_used) {
     std::cerr << "GPU timing: h2d " << report.h2d_ms << " ms; kernel "
               << report.kernel_ms << " ms; d2h " << report.d2h_ms
@@ -283,10 +275,9 @@ bool run_gpu(theseus::TheseusAligner &aligner, Inputs &inputs,
               << report.align_batch_host_ms << " ms\n";
   }
 
-  // The output above is correct either way, because the backend falls back to
-  // the CPU when the kernel result is unusable. That makes a byte comparison
-  // against a CPU golden pass without the kernel having contributed anything,
-  // so when the caller asks for a GPU result, say so explicitly.
+  // L'output sopra e' giusto comunque, perche' il backend ricade sulla CPU: un
+  // confronto byte a byte col golden passerebbe senza che il kernel abbia fatto
+  // niente. Se il chiamante vuole un risultato GPU, bisogna dirlo esplicitamente.
   if (require_gpu_result && !report.result_from_device) {
     std::cerr << "GPU RESULT REQUIRED BUT NOT PRODUCED: the alignments written "
                  "are the CPU's, not the kernel's.\n";

@@ -143,10 +143,9 @@ def convert_one(
     if start_node not in gfa_nodes:
         raise ConversionError(f"node_id {start_node!r} is not present in the GFA")
 
-    # vg omits protobuf scalars that hold their default, so an absent offset
-    # means 0 rather than a broken record. Confirmed against the GGBS position
-    # CSVs: every read whose JSON carries no offset is listed there at offset 0.
-    # Same rule as is_reverse below.
+    # vg omette gli scalari protobuf al valore di default, quindi un offset
+    # assente vale 0 e non e' un record rotto. Confermato sui CSV di posizione
+    # GGBS. Stessa regola per is_reverse qui sotto.
     try:
         start_offset = int(position.get("offset", 0))
     except (TypeError, ValueError) as exc:

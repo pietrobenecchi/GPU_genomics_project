@@ -77,20 +77,15 @@ Alignment TheseusAligner::align_gpu(
     std::string &start_node,
     int start_offset) {
 
-    // A single sequence never justifies a host-to-device transfer, so there is
-    // no device path here. align_batch_gpu is where the GPU work belongs.
+    // Una sequenza sola non giustifica un transfer host-device: qui non c'e'
+    // percorso GPU, il lavoro sta in align_batch_gpu.
     return aligner_impl_->align(seq, start_node, start_offset);
 }
 
 namespace {
 
-/**
- * @brief Read the uploaded graph back and check it against the host CSR.
- *
- * @param device_graph  Graph in device memory
- * @param host_csr      What the graph should be
- * @return              Description of the outcome, for GpuBatchReport::message
- */
+// Rilegge il grafo caricato e lo confronta col CSR host. Torna la descrizione
+// dell'esito, per GpuBatchReport::message.
 std::string verify_device_graph(gpu::DeviceGraph *device_graph,
                                 const gpu::GraphCsr &host_csr) {
 
@@ -157,15 +152,7 @@ std::string describe_align_result_mismatch(size_t idx, const gpu::AlignResult &g
 
 }  // namespace
 
-/**
- * @brief Batched GPU alignment entry point.
- *
- * @param seqs
- * @param start_nodes
- * @param start_offsets
- * @param report
- * @return std::vector<Alignment>
- */
+// Entry point dell'allineamento GPU a batch.
 std::vector<Alignment> TheseusAligner::align_batch_gpu(
     const std::vector<std::string> &seqs,
     std::vector<std::string> &start_nodes,
@@ -180,11 +167,9 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
             std::chrono::steady_clock::now() - start).count();
     };
 
-    // Pre-flight the one bound that is derivable rather than measured.
-    // extend_diagonal computes j = diag + offset with j indexing a vertex and
-    // offset indexing the query, so diag lives in [-max_query, max_vertex] and
-    // the ScratchPad needs max_vertex + max_query + 1 diagonals. Checking it here
-    // turns "the kernel came back empty" into a number the caller can act on.
+    // L'unico bound derivabile invece che misurato: diag sta in [-max_query,
+    // max_vertex], quindi la ScratchPad vuole max_vertex + max_query + 1
+    // diagonali. Controllarlo qui da' un numero invece di un kernel vuoto.
     if (report != nullptr && !seqs.empty()) {
         size_t max_query = 0;
         for (const auto &seq : seqs) {
@@ -200,7 +185,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     }
 
     const auto prepare_start = std::chrono::steady_clock::now();
-    // Flatten into the concatenated layout the device consumes.
+    // Appiattisce nel layout concatenato che consuma il device.
     std::vector<char> chars;
     std::vector<int32_t> offsets;
     std::vector<int32_t> start_node_ids;
@@ -225,13 +210,9 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
 
     gpu::BatchView view{chars.data(), offsets.data(),
                         static_cast<int32_t>(seqs.size())};
-    // Page-locked and kept across batches; see host_batch_buffers(). They used
-    // to be the batch's whole D2H payload -- 288 KB of traceback per query,
-    // 576 MiB page-locked for 2048 of them, 250 ms of cudaHostAlloc on the
-    // first batch. The traceback cells now travel packed, in a staging buffer
-    // the workspace owns, so what is left here is three small arrays: the
-    // results, the lengths, and a CompactTracebackState that is sizes and
-    // pointers into that buffer.
+    // Page-locked e tenuti fra i batch, vedi host_batch_buffers(). Erano l'intero
+    // payload D2H: 288 KB per query, 576 MiB su 2048, 250 ms di cudaHostAlloc al
+    // primo batch. Ora le celle viaggiano compattate e qui restano tre array corti.
     const auto host_buffers_start = std::chrono::steady_clock::now();
     int32_t *device_lengths = nullptr;
     gpu::AlignResult *device_results = nullptr;
@@ -241,7 +222,7 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
     std::vector<CompactTracebackState> fallback_states;
     if (!aligner_impl_->host_batch_buffers(seqs.size(), &device_states,
                                            &device_results, &device_lengths)) {
-        // Page locking failed. The batch still runs, just without the benefit.
+        // Page lock fallito: il batch gira lo stesso, solo senza il vantaggio.
         fallback_lengths.assign(seqs.size(), -1);
         fallback_results.resize(seqs.size());
         fallback_states.resize(seqs.size());
@@ -249,8 +230,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         device_results = fallback_results.data();
         device_states = fallback_states.data();
     }
-    // The -1 is what the layout check below tests against, and the buffer is
-    // reused, so a stale length from the previous batch would pass it.
+    // Il -1 e' quello che controlla il test di layout qui sotto, e il buffer si
+    // riusa: una lunghezza vecchia del batch prima passerebbe il test.
     std::fill(device_lengths, device_lengths + seqs.size(), -1);
     if (report != nullptr) report->host_buffers_ms = elapsed_ms(host_buffers_start);
     gpu::AlignOptions options;
@@ -368,13 +349,9 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         }
     }
 
-    // Checked after aligning, not before: the wavefronts only grow while the
-    // algorithm runs. A fixed-size device buffer would have been overrun here.
-    // One check for every fixed-capacity buffer in the flattened QueryState:
-    // ScratchPad span, BeyondScope wavefronts and the Scope ring. Their sizes are
-    // fixed, so an overflow would have meant a device buffer read or write past
-    // its end. Checked after aligning, not before: the buffers only fill while
-    // the algorithm runs.
+    // Un controllo per ogni buffer a capacita' fissa della QueryState: span della
+    // ScratchPad, wavefront BeyondScope, anello dello Scope. Si controlla dopo
+    // l'allineamento, non prima: i buffer si riempiono mentre l'algoritmo gira.
     if (report != nullptr && report->scratchpad_span_required > 0) {
         report->message += "; SCRATCHPAD TOO SMALL FOR THIS BATCH: needs " +
                            std::to_string(report->scratchpad_span_required) +
@@ -386,8 +363,8 @@ std::vector<Alignment> TheseusAligner::align_batch_gpu(
         aligner_impl_->query_state_capacity_exceeded()) {
         report->query_state_capacity_exceeded = true;
         report->wavefront_capacity_exceeded = true;  // same underlying cause
-        // Name the buffer that ran out first and what it wanted. Listing every
-        // capacity told you nothing about which one was the problem.
+        // Nomina il buffer finito per primo e quanto voleva: elencare tutte le
+        // capacita' non diceva quale fosse il problema.
         report->message +=
             std::string("; QUERYSTATE CAPACITY EXCEEDED: ") +
             cap_buffer_name(aligner_impl_->capacity_reason()) + " needed " +

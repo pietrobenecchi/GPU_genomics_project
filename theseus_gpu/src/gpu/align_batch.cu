@@ -1,16 +1,6 @@
-/**
- * @file align_batch.cu
- * @brief The batch entry point: what happens around a launch, not inside one.
- *
- * A batch is split into chunks that fit the device, and each chunk walks the
- * same five phases -- grow, upload, launch, read results, read traceback. Each
- * phase is a function that returns a Status, so a failure returns from where it
- * happened; the `goto cleanup` chain this replaces existed only because the
- * timing events had to be destroyed on every path, which ChunkEvents now does.
- *
- * No device code here: the kernels are reached through kernel_launch.h and the
- * allocations through device_memory.h.
- */
+// Entry point del batch: attorno al lancio, non dentro. Il batch e' spezzato in
+// chunk che stanno nel device, ognuno con le stesse cinque fasi: cresci, carica,
+// lancia, leggi i risultati, leggi il traceback. Qui non c'e' codice device.
 
 #include "gpu/align_gpu.h"
 #include "gpu/device_memory.h"
@@ -32,13 +22,9 @@ namespace {
 
 TimingReport g_last_timing;
 
-/**
- * @brief The four events a chunk is timed against, destroyed however it exits.
- *
- * A null event is one that could not be created. Timing is a diagnostic, so
- * that costs the chunk its report and nothing else -- which is why every use
- * below is guarded rather than asserted.
- */
+// I quattro eventi con cui si cronometra un chunk, distrutti comunque esca.
+// Un evento nullo e' uno che non si e' potuto creare: il timing e' solo una
+// diagnostica, quindi ogni uso e' protetto da un controllo invece che asserito.
 struct ChunkEvents {
     cudaEvent_t start = nullptr;
     cudaEvent_t h2d = nullptr;
@@ -66,14 +52,14 @@ struct ChunkEvents {
         if (ev != nullptr) cudaEventRecord(ev);
     }
 
-    /** @brief All four exist, so the three intervals between them mean something. */
+    // Ci sono tutti e quattro, quindi i tre intervalli hanno senso.
     bool complete() const {
         return start != nullptr && h2d != nullptr && kernel != nullptr &&
                d2h != nullptr;
     }
 };
 
-/** @brief One cudaMemcpy, with @p what recorded in the error slot if it fails. */
+// Una cudaMemcpy, con what registrato nello slot d'errore se fallisce.
 Status copy(void *dst, const void *src, size_t bytes, cudaMemcpyKind kind,
             const char *what) {
     const cudaError_t err = cudaMemcpy(dst, src, bytes, kind);
@@ -84,7 +70,7 @@ Status copy(void *dst, const void *src, size_t bytes, cudaMemcpyKind kind,
     return Status::Ok;
 }
 
-/** @brief One kernel launch's error, named for the error slot. */
+// L'errore di un lancio di kernel, con il nome per lo slot d'errore.
 Status launched(cudaError_t err, const char *what) {
     if (err != cudaSuccess) {
         set_error(what, err);
@@ -93,10 +79,8 @@ Status launched(cudaError_t err, const char *what) {
     return Status::Ok;
 }
 
-/**
- * @brief The block size to launch with: what the options ask for when it is one
- * of the three the kernel is validated at, and 128 otherwise.
- */
+// Larghezza del blocco con cui lanciare: quella chiesta nelle opzioni se e' una
+// delle tre su cui il kernel e' validato (64/128/256), altrimenti 128.
 int32_t resolve_threads_per_block(const AlignOptions &options) {
     return (options.threads_per_block == 64 || options.threads_per_block == 128 ||
             options.threads_per_block == 256)
@@ -104,28 +88,9 @@ int32_t resolve_threads_per_block(const AlignOptions &options) {
                : 128;
 }
 
-/**
- * @brief The chunk's inputs, host to device.
- *
- * The QueryState array is deliberately *not* zeroed here. It used to be, at
- * 4.4 MB per query -- 8.8 GB of writes for a 2048-query batch, more than
- * everything else in the H2D window put together and, at 40.8 ms against a
- * 4.7 ms kernel, the largest single cost of a batch after the D2H.
- *
- * Nothing needs it. align_one establishes every scalar it reads
- * (sp_init_window, sc_init, vd_init_scalar, bs_new_alignment, the cap_*
- * diagnostics) and clears the two arrays that are indexed without a size --
- * sp_off over the window and vd_vertex_to_idx over the graph. Every other
- * array in the QueryState is append-only behind a counter that those calls
- * set to zero: a cell of bs_m_wf beyond bs_m_wf_size, an InvalidSeg beyond
- * vd_m_invalid_size[a], a Scope wavefront entry beyond sc_i_wf_size[s] is
- * never read, and vd_activate_vertex zeroes a vertex's own counters the
- * first time it becomes active.
- *
- * That is an argument, not a proof, so it is checked rather than trusted:
- * compute-sanitizer --tool initcheck reports a read of uninitialised device
- * memory, and the regression runs under it.
- */
+// Gli input del chunk, da host a device. Le QueryState non si azzerano qui: a
+// ogni batch costava 4.4 MB per query (40.8 ms su 2048, kernel da 4.7 ms). Si
+// azzera una volta per allocazione in ensure_workspace_capacity.
 Status upload_batch(const BatchView &batch, DeviceWorkspace *workspace,
                     const int32_t *start_node_ids,
                     const int32_t *start_offsets) {
@@ -148,7 +113,7 @@ Status upload_batch(const BatchView &batch, DeviceWorkspace *workspace,
                 cudaMemcpyHostToDevice, "cudaMemcpy(start_offsets H2D)");
 }
 
-/** @brief The lengths probe and the alignment itself, waited on. */
+// La sonda sulle lunghezze e l'allineamento vero, con l'attesa del device.
 Status run_alignment(const BatchView &device_batch, const DeviceGraph *graph,
                      DeviceWorkspace *workspace, AlignScoring scoring,
                      int32_t threads_per_block) {
@@ -169,7 +134,7 @@ Status run_alignment(const BatchView &device_batch, const DeviceGraph *graph,
                     "theseus_align_batch_kernel synchronize");
 }
 
-/** @brief The two fixed-size outputs: one length and one AlignResult per query. */
+// I due output a taglia fissa: una lunghezza e un AlignResult per query.
 Status download_results(const BatchView &batch, DeviceWorkspace *workspace,
                         AlignResult *out_results, int32_t *out_seq_lengths) {
     const size_t n = static_cast<size_t>(batch.num_seqs);
@@ -181,13 +146,9 @@ Status download_results(const BatchView &batch, DeviceWorkspace *workspace,
                 cudaMemcpyDeviceToHost, "cudaMemcpy(results D2H)");
 }
 
-/**
- * @brief Grow the three packing buffers to hold @p total_cells more cells.
- *
- * The device buffer and the offset array only ever have to fit the current
- * chunk, so they are replaced when too small. The host buffer accumulates every
- * chunk of the batch, so it grows geometrically and keeps what is already in it.
- */
+// Fa crescere i tre buffer di packing per altre total_cells celle. Device e
+// offset tengono solo il chunk corrente, quindi si rimpiazzano; quello host
+// accumula tutti i chunk, quindi cresce geometricamente e conserva.
 Status ensure_packed_capacity(DeviceWorkspace *workspace, int32_t num_seqs,
                               size_t total_cells, size_t packed_host_used) {
     cudaError_t err = cudaSuccess;
@@ -215,23 +176,22 @@ Status ensure_packed_capacity(DeviceWorkspace *workspace, int32_t num_seqs,
         }
         workspace->pack_offsets_capacity = static_cast<size_t>(num_seqs);
     }
-    // Room for what earlier chunks already appended plus this chunk.
-    // The grow copies the existing prefix across rather than dropping
-    // it: those cells are this batch's results, and the caller has not
-    // seen them yet.
+    // Spazio per cio' che i chunk precedenti hanno gia' accodato piu' questo.
+    // La crescita ricopia il prefisso invece di buttarlo: sono risultati di
+    // questo batch che il chiamante non ha ancora visto.
     if (workspace->packed_host_capacity < packed_host_used + total_cells) {
         size_t want = workspace->packed_host_capacity * 2;
         if (want < packed_host_used + total_cells) {
             want = packed_host_used + total_cells;
         }
-        // Page-locked if it can be: this is the batch's whole traceback
-        // payload now, and the copy is the reason the buffer exists.
-        // Pageable is a correct fallback, only slower.
+        // Page-locked se si puo': qui passa tutto il payload del traceback e la
+        // copia e' il motivo per cui il buffer esiste. Pageable e' un fallback
+        // corretto, solo piu' lento.
         void *host_buffer = nullptr;
         bool pinned = cudaHostAlloc(&host_buffer, sizeof(Cell) * want,
                                     cudaHostAllocDefault) == cudaSuccess;
         if (!pinned) {
-            cudaGetLastError();   // the failed alloc is handled, not propagated
+            cudaGetLastError();   // l'alloc fallita e' gestita, non propagata
             host_buffer = std::malloc(sizeof(Cell) * want);
         }
         if (host_buffer == nullptr) {
@@ -256,14 +216,9 @@ Status ensure_packed_capacity(DeviceWorkspace *workspace, int32_t num_seqs,
     return Status::Ok;
 }
 
-/**
- * @brief The variable-size output: what each query's backtrace will read.
- *
- * Three passes over the chunk, in this order because each needs the one before
- * it: the metadata says how many cells every query produced, the prefix sum of
- * those sizes says where each query's slice goes, and only then can the device
- * pack into a buffer the right size and copy it back in one transfer.
- */
+// L'output a taglia variabile: le celle che leggera' il backtrace. Tre passate
+// sul chunk, ognuna serve alla successiva: i metadati danno le taglie, la prefix
+// sum le posizioni, poi il device compatta e si copia in un transfer solo.
 Status download_traceback(const BatchView &batch, DeviceWorkspace *workspace,
                           int32_t threads_per_block, void *out_query_states,
                           size_t *packed_host_used,
@@ -290,9 +245,9 @@ Status download_traceback(const BatchView &batch, DeviceWorkspace *workspace,
         host.cap_available = meta.cap_available;
     }
 
-    // Pack on the device, copy once. The layout is the exclusive prefix
-    // sum of the three sizes just read back, computed here and handed to
-    // the kernel, so host and device agree without a second scan.
+    // Si compatta sul device e si copia una volta sola. Il layout e' la prefix
+    // sum esclusiva delle tre dimensioni appena rilette, calcolata qui e passata
+    // al kernel: host e device sono d'accordo senza una seconda scansione.
     size_t total_cells = 0;
     std::vector<int32_t> base(static_cast<size_t>(batch.num_seqs));
     for (int32_t i = 0; i < batch.num_seqs; ++i) {
@@ -331,8 +286,8 @@ Status download_traceback(const BatchView &batch, DeviceWorkspace *workspace,
         if (status != Status::Ok) return status;
     }
 
-    // Offsets, not pointers: a later chunk may move the buffer.
-    // align_batch turns these into pointers once every chunk is in.
+    // Offset, non puntatori: un chunk successivo puo' spostare il buffer.
+    // align_batch li trasforma in puntatori quando sono arrivati tutti.
     for (int32_t i = 0; i < batch.num_seqs; ++i) {
         packed_cell_offsets->push_back(
             *packed_host_used + static_cast<size_t>(base[static_cast<size_t>(i)]));
@@ -345,23 +300,9 @@ Status download_traceback(const BatchView &batch, DeviceWorkspace *workspace,
 
 const TimingReport &last_timing() { return g_last_timing; }
 
-/**
- * @brief One launch's worth of a batch.
- *
- * This is what align_batch used to be, with three differences that let the
- * entry point below call it more than once for the same batch:
- *
- * - @p chunk_capacity, not @p batch.num_seqs, sizes the QueryState array. The
- *   workspace stays grow-only and is reused by every chunk;
- * - the packed traceback cells are *appended* to the host staging buffer at
- *   @p packed_host_used rather than written from its start, and each query's
- *   slice is recorded in @p packed_cell_offsets as an offset rather than a
- *   pointer. Growing the buffer between chunks moves it, so the pointers can
- *   only be formed once every chunk has landed -- align_batch does that;
- * - timings accumulate into @p timing instead of replacing it.
- *
- * Every out_* pointer is already the chunk's slice.
- */
+// Un chunk di batch, cioe' un solo lancio. E' richiamabile piu' volte sullo
+// stesso batch: dimensiona su chunk_capacity, accoda il traceback al buffer host
+// per offset (la crescita lo sposta) e somma i tempi. Gli out_* sono gia' fette.
 static Status align_chunk(const BatchView &batch,
                           const DeviceGraph *graph,
                           DeviceWorkspace *workspace,
@@ -406,8 +347,8 @@ static Status align_chunk(const BatchView &batch,
     if (status != Status::Ok) return status;
     ChunkEvents::record(events.h2d);
 
-    // The kernel reads the offsets from device memory, so the view it is handed
-    // is the workspace's copy of the chunk, not the caller's.
+    // Il kernel legge gli offset dalla memoria device, quindi la view che riceve
+    // e' la copia del chunk nel workspace, non quella del chiamante.
     const BatchView device_batch{workspace->chars, workspace->offsets,
                                  batch.num_seqs};
     status = run_alignment(device_batch, graph, workspace, scoring,
@@ -436,8 +377,8 @@ static Status align_chunk(const BatchView &batch,
         cudaEventSynchronize(events.d2h);
     }
     if (events.complete()) {
-        // Accumulated, not assigned: a batch is one or more chunks and the
-        // caller is told what the whole batch cost.
+        // Sommati, non assegnati: un batch e' uno o piu' chunk e al chiamante
+        // interessa il costo dell'intero batch.
         float h2d = 0.0f, kernel = 0.0f, d2h = 0.0f, total = 0.0f;
         cudaEventElapsedTime(&h2d, events.start, events.h2d);
         cudaEventElapsedTime(&kernel, events.h2d, events.kernel);
@@ -451,30 +392,14 @@ static Status align_chunk(const BatchView &batch,
     return Status::Ok;
 }
 
-/**
- * @brief Queries one launch may hold, from what the device can actually spare.
- *
- * The QueryState array is the only part of the workspace that scales with the
- * batch -- 3.95 MB each against a few tens of bytes for everything else -- so
- * it alone decides how many queries fit, and no other term is worth modelling.
- *
- * The budget is the free memory plus whatever the state array already holds,
- * because that allocation is reusable rather than lost, minus a reserve for the
- * graph, the staging buffers, the context and fragmentation. Derived from
- * cudaMemGetInfo at call time, so it follows the device it is running on
- * instead of a constant tuned to one card.
- *
- * Never below what is already allocated: that memory is paid for. Never above
- * the batch: a batch that fits is still one launch, exactly as before.
- */
+// Quante query stanno in un lancio, dalla memoria del device. Decide da sola
+// l'array delle QueryState (3.95 MB l'una, il resto sono decine di byte). Budget
+// = libera + quella gia' negli stati - riserva, da cudaMemGetInfo a ogni chiamata.
 static int32_t chunk_capacity_for(const DeviceWorkspace *workspace,
                                   int32_t num_seqs) {
-    // Test hook. Chunking is only reachable on its own terms by a batch large
-    // enough to exhaust the device, which is an awkward thing to require of a
-    // regression run; forcing the size lets the same batch be put through one
-    // launch and through many and the two outputs compared directly. Ignored
-    // unless set to a positive number, so it costs a getenv per batch and
-    // changes nothing otherwise.
+    // Hook di test: il chunking si attiverebbe solo con un batch che satura il
+    // device, scomodo in regressione. Forzare la taglia fa passare lo stesso
+    // batch da uno e da tanti lanci. Ignorato se non e' positivo.
     if (const char *forced = std::getenv("THESEUS_GPU_CHUNK")) {
         const int value = std::atoi(forced);
         if (value > 0) {
@@ -484,14 +409,14 @@ static int32_t chunk_capacity_for(const DeviceWorkspace *workspace,
 
     const size_t state_bytes = sizeof(QueryState);
     size_t free_bytes = 0, total_bytes = 0;
-    size_t budget = state_bytes;   // one query rather than a guess, if the query fails
+    size_t budget = state_bytes;   // se la query fallisce, una query invece di un'ipotesi
     if (cudaMemGetInfo(&free_bytes, &total_bytes) == cudaSuccess) {
         const size_t committed = workspace->batch_capacity * state_bytes;
         const size_t reserve = size_t{192} << 20;
         const size_t pool = free_bytes + committed;
         budget = pool > reserve ? pool - reserve : 0;
     } else {
-        cudaGetLastError();   // handled, not propagated
+        cudaGetLastError();   // gestito, non propagato
     }
     size_t n = budget / state_bytes;
     if (n < 1) {
@@ -536,15 +461,15 @@ Status align_batch(const BatchView &batch,
         packed_cell_offsets.reserve(static_cast<size_t>(batch.num_seqs));
     }
 
-    // Chunks are consumed in order and each writes its own slice of the output
-    // arrays, so the batch comes back in the caller's order whether it took one
-    // launch or twenty.
+    // I chunk si consumano in ordine e ognuno scrive la propria fetta degli
+    // array di output, quindi il batch torna nell'ordine del chiamante sia che
+    // sia servito un lancio sia che ne siano serviti venti.
     for (int32_t start = 0; start < batch.num_seqs; start += chunk) {
         const int32_t n = (batch.num_seqs - start) < chunk ? (batch.num_seqs - start)
                                                            : chunk;
 
-        // The kernel reads batch.offsets[query_id] and indexes batch.chars from
-        // it, so a chunk needs its offsets rebased to its own first character.
+        // Il kernel legge batch.offsets[query_id] e da li' indicizza batch.chars,
+        // quindi gli offset del chunk vanno ribasati sul suo primo carattere.
         std::vector<int32_t> chunk_offsets(static_cast<size_t>(n) + 1);
         const int32_t base_char = batch.offsets[start];
         for (int32_t i = 0; i <= n; ++i) {
@@ -563,8 +488,8 @@ Status align_batch(const BatchView &batch,
         }
     }
 
-    // Every chunk has landed, so the staging buffer will not move again and the
-    // recorded offsets can become the pointers the caller reads.
+    // Tutti i chunk sono arrivati: il buffer di staging non si muove piu' e gli
+    // offset registrati possono diventare i puntatori che legge il chiamante.
     if (host_states != nullptr) {
         for (size_t i = 0; i < packed_cell_offsets.size(); ++i) {
             CompactTracebackState &host = host_states[i];

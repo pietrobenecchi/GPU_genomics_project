@@ -208,14 +208,9 @@ THESEUS_HD inline void core_check_and_store_jumps(QueryState &qs, const char *qu
     }
 }
 
-/**
- * @brief Sparsify half of the D recurrence: fold every contribution that can
- * reach this vertex's D wavefront into the ScratchPad, where candidates landing
- * on the same diagonal collide and the largest offset wins.
- *
- * The densify half that used to follow it is now the block-parallel
- * filter+compaction in align_gpu.cu.
- */
+// Meta' sparsify della ricorrenza D: riversa nella ScratchPad ogni contributo
+// che puo' raggiungere il wavefront D del vertice; sulla stessa diagonale vince
+// l'offset piu' grande. La meta' densify e' ora parallela, in align_gpu.cu.
 THESEUS_HD inline void core_next_d_sparsify(QueryState &qs, const AlignScoring &scoring,
                                             int32_t query_len, const GraphCsrView &graph,
                                             int32_t score, int32_t v) {
@@ -240,7 +235,7 @@ THESEUS_HD inline void core_next_d_sparsify(QueryState &qs, const AlignScoring &
     }
 }
 
-/** @brief Sparsify half of the M recurrence. See core_next_d_sparsify. */
+// Meta' sparsify della ricorrenza M. Vedi core_next_d_sparsify.
 THESEUS_HD inline void core_next_m_sparsify(QueryState &qs, const AlignScoring &scoring,
                                             int32_t query_len, const GraphCsrView &graph,
                                             int32_t score, int32_t v) {

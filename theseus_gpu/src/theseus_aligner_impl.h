@@ -48,26 +48,12 @@
 
 namespace theseus {
 
-/**
- * @brief Cells each wavefront is preallocated to hold.
- *
- * PROVISIONAL. Device code cannot reallocate, so every wavefront the GPU port
- * touches needs an upper bound fixed before the kernel launches. This number is
- * not that bound: it is the value the CPU has always used, and nothing has ever
- * tested it. Measured on the sample data (5 queries of 11-13 bases over an
- * 8-vertex graph) the wavefronts peak at 4 cells, so the value below is 256x
- * larger than that data can distinguish. Sizing a real bound from this dataset
- * would be meaningless.
- *
- * A real bound has to be derived from query length, vertex length and vertex
- * count, and measured on a realistic graph with real reads. Until then
- * Scope::capacity_exceeded() reports when the algorithm outgrows this value, so
- * that the day it happens is not the day a kernel silently reads past the end of
- * a buffer.
- *
- * The same constraint applies to BeyondScope, VerticesData and ScratchPad, which
- * also grow on demand and are not covered yet.
- */
+// Celle preallocate per ogni wavefront. PROVVISORIO: e' il valore che la CPU ha
+// sempre usato, mai messo alla prova. Sul dataset giocattolo i wavefront arrivano
+// a 4 celle, quindi da li' un bound vero non si ricava.
+
+// Va derivato da lunghezza della query, dei vertici e loro numero, e misurato su
+// un grafo realistico. Intanto capacity_exceeded() segnala quando si sfora.
 constexpr int kProvisionalWavefrontCapacity = 1024;
 
 class TheseusAlignerImpl {
@@ -80,96 +66,63 @@ public:
      */
     ~TheseusAlignerImpl();
 
-    /**
-     * @brief The CSR mirror of the graph, built once at construction.
-     */
+    // La copia CSR del grafo, costruita una volta alla creazione.
     const gpu::GraphCsr &graph_csr() const { return *_graph_csr; }
 
-    /**
-     * @brief Whether the alignments run so far outgrew the fixed wavefront
-     * capacity, see kProvisionalWavefrontCapacity.
-     */
+    // Se gli allineamenti fatti finora hanno sforato la capacita' fissa dei
+    // wavefront, vedi kProvisionalWavefrontCapacity.
     bool wavefront_capacity_exceeded() const { return _qs->capacity_exceeded; }
 
-    /**
-     * @brief Whether any fixed-capacity buffer in the flattened QueryState (the
-     * ScratchPad span, the BeyondScope wavefronts, the Scope ring, ...) was too
-     * small for some alignment. Same meaning as wavefront_capacity_exceeded():
-     * harmless on the CPU, fatal for a device buffer, so it must never be silent.
-     */
+    // Se un buffer a capacita' fissa della QueryState non e' bastato per qualche
+    // allineamento. Come wavefront_capacity_exceeded(): innocuo sulla CPU, fatale
+    // su un buffer device, quindi non deve mai passare in silenzio.
     bool query_state_capacity_exceeded() const { return _qs->capacity_exceeded; }
 
-    /**
-     * @brief Largest per-score wavefront size reached so far, to size a real
-     * bound from.
-     */
+    // Il wavefront per score piu' grande raggiunto finora, per ricavarne un bound.
     std::ptrdiff_t peak_wavefront_capacity() const { return _qs->sc_peak_wf; }
 
-    /** @brief Which fixed buffer ran out first, and the entries it wanted vs had. */
+    // Quale buffer fisso e' finito per primo, e le entry che voleva contro quelle
+    // che aveva.
     int8_t  capacity_reason() const { return _qs->cap_reason; }
     int32_t capacity_required() const { return _qs->cap_required; }
     int32_t capacity_available() const { return _qs->cap_available; }
 
-    /**
-     * @brief The graph in device memory, uploaded on first use.
-     *
-     * Uploading is deferred rather than done at construction so that CPU-only
-     * runs never touch the device. The upload happens once per aligner, not
-     * once per batch: the graph is read-only and shared by every query.
-     *
-     * @return Handle owned by this object, or nullptr if no device is usable
-     */
+    // Il grafo in memoria device, caricato al primo uso: differito cosi' un run
+    // solo CPU non tocca mai la scheda. Una volta per aligner, non per batch,
+    // perche' il grafo e' in sola lettura e lo condividono tutte le query.
     gpu::DeviceGraph *device_graph();
     gpu::DeviceWorkspace *device_workspace() const { return _device_workspace; }
 
-    /**
-     * @brief The three host buffers align_batch writes its results into, page
-     * locked and kept across batches.
-     *
-     * They used to be std::vectors built per batch. The compact traceback state
-     * is 288 KB per query, so on 2048 queries that is a 590 MB allocation that
-     * has never been touched, and the D2H that fills it pays a fault per page
-     * and a staging copy, because the driver cannot DMA into pageable memory.
-     * Here they are allocated once with cudaHostAlloc, grown only when a batch
-     * needs more room than the last one did, and freed with the aligner.
-     *
-     * The buffers are handed out uninitialised: align_batch writes every entry
-     * of all three. Returns false if the allocation failed, in which case the
-     * pointers are left null and the caller must fall back.
-     */
+    // I tre buffer host in cui align_batch scrive, page-locked e tenuti fra un
+    // batch e l'altro. Erano std::vector per batch: 288 KB per query, cioe' 590 MB
+    // mai toccati su 2048 query, piu' un page fault e una copia di staging a pagina.
+
+    // Escono non inizializzati, align_batch li riempie tutti e tre per intero.
+    // Torna false se l'allocazione fallisce: i puntatori restano nulli.
     bool host_batch_buffers(size_t queries,
                             CompactTracebackState **out_states,
                             gpu::AlignResult **out_results,
                             int32_t **out_lengths);
 
-    /**
-     * @brief Host-side lookup used before launching a GPU batch. Kernels receive
-     * numeric vertex ids; graph names stay on the host for parsing and output.
-     */
+    // Lookup lato host, prima di lanciare un batch: i kernel ricevono id numerici,
+    // i nomi dei vertici restano qui per il parsing e l'output.
     int32_t graph_vertex_id(const std::string &name);
 
-    /** @brief Longest vertex sequence in the graph; half of the ScratchPad bound. */
+    // Il vertice piu' lungo del grafo, meta' del bound della ScratchPad.
     int32_t max_vertex_length() const;
 
-    /**
-     * @brief POD copy of internal penalties for the CUDA backend.
-     */
+    // Copia POD delle penalita' interne, per il backend CUDA.
     gpu::AlignScoring gpu_scoring() const {
         return gpu::AlignScoring{_internal_penalties.mism(), _internal_penalties.gapo(),
                                  _internal_penalties.gape(), _qs->sc_nscores};
     }
 
-    /**
-     * @brief Result signature of the most recent CPU alignment, shaped like the
-     * CUDA kernel output so the host can compare both paths before trusting the
-     * device result for backtrace/output.
-     */
+    // Firma del risultato dell'ultimo allineamento CPU, nella forma dell'uscita
+    // del kernel: cosi' l'host confronta i due percorsi prima di fidarsi.
     gpu::AlignResult last_align_result() const;
 
-    /**
-     * @brief Reconstruct an Alignment by running the existing host backtrace on
-     * the compact traceback state copied back from the CUDA kernel.
-     */
+    // Ricostruisce un Alignment facendo girare il backtrace host sullo stato
+    // compatto tornato dal kernel.
     Alignment alignment_from_gpu_result(std::string_view seq,
                                          int start_offset,
                                          const CompactTracebackState &state,

@@ -1,17 +1,8 @@
 #pragma once
 
-/**
- * @file device_memory.h
- * @brief The two long-lived device allocations, and the calls that manage them.
- *
- * Both are opaque in align_gpu.h -- the project outside src/gpu only ever holds
- * pointers to them -- and defined here so that the batch orchestration can see
- * their members without also seeing the kernels.
- *
- * The workspace is grow-only and lives for the process: every batch, and every
- * chunk of a batch, reuses the same buffers, so a steady workload allocates
- * once and then never calls cudaMalloc again.
- */
+// Grafo e workspace, le due allocazioni che sopravvivono al singolo batch.
+// Opache in align_gpu.h, qui visibili all'orchestrazione ma non ai kernel. Il
+// workspace cresce e basta: a regime non si chiama piu' cudaMalloc.
 
 #include "gpu/align_gpu.h"
 #include "gpu/kernel_launch.h"
@@ -22,11 +13,9 @@
 namespace theseus {
 namespace gpu {
 
-/**
- * @brief The graph in device memory, plus the sizes needed to read it back.
- */
+// Il grafo in memoria device, piu' le dimensioni che servono per rileggerlo.
 struct DeviceGraph {
-    GraphCsrView view;  // Pointers below, as seen by kernels
+    GraphCsrView view;  // I puntatori qui sotto, come li vedono i kernel
     char *vertex_chars = nullptr;
     int32_t *vertex_offsets = nullptr;
     int32_t *edge_targets = nullptr;
@@ -48,31 +37,21 @@ struct DeviceWorkspace {
     size_t query_capacity = 0;
     size_t batch_capacity = 0;
 
-    // Staging for the packed traceback: the cells the backtrace will actually
-    // read, end to end, plus where each query's slice starts. Sized on the
-    // cells a batch really used, so they grow with the workload and not with
-    // kBeyondScopeCapacity. Kept on the workspace so that the page lock is paid
-    // once per process, like the other host buffers.
+    // Staging del traceback compattato: solo le celle che il backtrace legge,
+    // piu' l'inizio della fetta di ogni query. Dimensionati sulle celle usate dal
+    // batch, non su kBeyondScopeCapacity; qui il page lock si paga una volta.
     Cell *packed_device = nullptr;
     int32_t *pack_offsets = nullptr;      // device, one base per query
-    size_t packed_device_capacity = 0;    // in cells
-    size_t pack_offsets_capacity = 0;     // in queries
+    size_t packed_device_capacity = 0;    // in celle
+    size_t pack_offsets_capacity = 0;     // in query
     Cell *packed_host = nullptr;
-    size_t packed_host_capacity = 0;      // in cells
+    size_t packed_host_capacity = 0;      // in celle
     bool packed_host_pinned = false;
 };
 
-/**
- * @brief Grow @p workspace so that a chunk of @p chunk_capacity queries whose
- * text is @p chars_bytes long fits, reusing whatever is already big enough.
- *
- * Two independent tests, because the two halves grow for different reasons: the
- * query text with the sequences a chunk happens to carry, everything else with
- * the chunk capacity.
- *
- * On failure returns Status::CudaError with the failing allocation named in the
- * error slot, and leaves the workspace holding exactly what it held before.
- */
+// Fa crescere il workspace a un chunk di chunk_capacity query con chars_bytes di
+// testo, riusando cio' che basta gia'. Due test separati: il testo segue le
+// sequenze, il resto la capacita'. Se fallisce lascia il workspace com'era.
 Status ensure_workspace_capacity(DeviceWorkspace *workspace,
                                  int32_t chunk_capacity, size_t chars_bytes);
 

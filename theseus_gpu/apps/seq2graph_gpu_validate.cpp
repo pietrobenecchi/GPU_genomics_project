@@ -73,9 +73,9 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
   std::vector<theseus::Alignment> gpu_alignments =
       gpu.align_batch_gpu(seqs, starts, offsets, &report, 128, true);
 
-  // Run the identical batch again on the same aligner. Besides checking that
-  // stale QueryState contents cannot affect correctness, this exercises the
-  // persistent device workspace at stable query and batch capacities.
+  // Rilancia lo stesso batch sullo stesso aligner: oltre a controllare che una
+  // QueryState sporca non cambi il risultato, esercita il workspace persistente
+  // a capacita' di query e batch stabili.
   theseus::GpuBatchReport reuse_report;
   std::vector<theseus::Alignment> reused_alignments =
       gpu.align_batch_gpu(seqs, starts, offsets, &reuse_report, 128, true);
@@ -115,10 +115,9 @@ bool run_batch(const std::string &name, const std::vector<QueryCase> &cases,
 }
 
 bool run_workspace_case(bool require_device) {
-  // The point of this case is that an overflow is detected and reported, so the
-  // input has to exceed whatever the current capacity is rather than a value
-  // that happened to exceed it once. A vertex and a query of this length need
-  // 2 * span + 1 diagonals, which cannot fit in span.
+  // Qui il punto e' che un overflow venga visto e riportato, quindi l'input deve
+  // sforare la capacita' corrente, non un valore che la sforava una volta. Un
+  // vertice e una query cosi' vogliono 2 * span + 1 diagonali, che in span non ci stanno.
   const int kLong = theseus::scratchpad_span();
   std::stringstream graph_cpu(long_graph_text(kLong));
   std::stringstream graph_gpu(long_graph_text(kLong));

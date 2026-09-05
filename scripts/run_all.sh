@@ -1,25 +1,12 @@
 #!/usr/bin/env bash
-#
-# run_all.sh - build, run, validate and profile the Theseus CUDA backend in one
-#              go, on a machine with a local NVIDIA GPU.
-#
-# Phases:
-#   1 env      record GPU, driver, nvcc, CPU
-#   2 build    configure + compile with CUDA enabled (auto-detected arch)
-#   3 verify   ctest, the sample-graph baseline diff, and the full GGBS
-#              CPU-vs-GPU regression at 64/128/256 threads per block
-#   4 perf     --repeat runs at 64/128/256 threads, plus the CPU baseline
-#   5 profile  ptxas registers/spill, and Nsight Compute on the kernel if ncu
-#              is installed
-#   6 summary  one readable report from all of the above
-#
-# Everything lands in a results directory; nothing is written into the source
-# tree except the build directory.
-#
-# Usage:  scripts/run_all.sh [options]
-#         scripts/run_all.sh --quick          # smoke datasets, no ncu
-#         scripts/run_all.sh --phases verify  # only what you need
-#
+# Costruisce, esegue, valida e profila il backend CUDA in un colpo solo, su una
+# macchina con GPU NVIDIA locale. Sei fasi: env, build, verify, perf, profile,
+# summary. Tutto finisce in una directory di risultati, fuori dal sorgente.
+
+#   scripts/run_all.sh [opzioni]
+#   scripts/run_all.sh --quick          # dataset smoke, niente ncu
+#   scripts/run_all.sh --phases verify  # solo quello che serve
+
 set -euo pipefail
 
 # ------------------------------------------------------------------ defaults
@@ -94,8 +81,8 @@ if [[ -z "$DATASETS" ]]; then
     fi
 fi
 
-# dataset -> graph. The names are GGBS labels for benchmark inputs; the "_err"
-# sets are the ones whose reads carry errors, so they need a non-zero score.
+# dataset -> grafo. I nomi sono etichette GGBS; i set "_err" hanno read con
+# errori, quindi vogliono uno score diverso da zero.
 graph_of() {
     case "$1" in
         ebola*) echo ebola ;;
@@ -107,15 +94,15 @@ graph_of() {
 LOG="$OUT_DIR/logs"
 mkdir -p "$LOG" "$OUT_DIR/ncu"
 STATUS="$OUT_DIR/status.txt"
-# Appended, not truncated: re-running a subset of the phases into an existing
-# results directory must not erase what the other phases already recorded.
+# Si accoda, non tronca: rilanciare qualche fase in una directory gia' esistente
+# non deve cancellare quello che le altre fasi hanno gia' registrato.
 touch "$STATUS"
 
 note() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" | tee -a "$STATUS"; }
 fail() { note "FAIL: $*"; exit 1; }
 section() { printf '\n\033[1m=== %s ===\033[0m\n' "$*"; note "--- $* ---"; }
 
-# run <logbase> <cmd...>: capture stdout/stderr, append the wall clock
+# run <logbase> <cmd...>: cattura stdout/stderr e accoda il tempo a muro
 run() {
     local lg="$1"; shift
     local t0 t1 rc
@@ -157,9 +144,9 @@ if has_phase env; then
     note "GPU       $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1) (sm_$ARCH)"
     note "nvcc      $(nvcc --version | tail -1 | tr -s ' ')"
 
-    # Pinning the clocks is what makes two timed runs comparable. It needs
-    # permissions; if it fails, the runs still work but the numbers move with
-    # temperature, so the summary says so.
+    # Fissare i clock e' cio' che rende confrontabili due run cronometrati. Serve
+    # il permesso; se fallisce i run girano lo stesso ma i numeri seguono la
+    # temperatura, e il sommario lo dice.
     CLOCKS_PINNED=no
     if [[ $LOCK_CLOCKS -eq 1 ]]; then
         maxsm="$(nvidia-smi --query-gpu=clocks.max.sm --format=csv,noheader 2>/dev/null | tr -dc '0-9')"
@@ -191,8 +178,8 @@ if has_phase build; then
         || fail "compile (see $LOG/cmake_build.log)"
     note "built     $(grep -c . "$LOG/cmake_build.log" 2>/dev/null || echo 0) lines of build log"
 
-    # --ptxas-options=-v puts registers, spill and shared per kernel into the
-    # build log. This is the cheapest occupancy diagnostic there is.
+    # --ptxas-options=-v mette registri, spill e shared per kernel nel log di
+    # build: e' la diagnosi di occupancy piu' economica che ci sia.
     grep -E "Compiling entry function|Function properties for|Used [0-9]+ registers|stack frame|spill" \
         "$LOG/cmake_build.log" > "$LOG/ptxas_all.txt" 2>/dev/null || true
     if [[ -s "$LOG/ptxas_all.txt" ]]; then
@@ -205,17 +192,16 @@ fi
 if has_phase verify; then
     section "3. Correctness"
 
-    # 3a. ctest: the sample graph, CPU and GPU, against baseline/sample_output.gaf
+    # 3a. ctest: grafo di esempio, CPU e GPU, contro baseline/sample_output.gaf
     if run "$LOG/ctest" ctest --test-dir "$BUILD_DIR" --output-on-failure; then
         note "ctest     PASS ($(grep -oE '[0-9]+% tests passed, [0-9]+ tests failed out of [0-9]+' "$LOG/ctest.out" | head -1))"
     else
         note "ctest     FAIL (see $LOG/ctest.out)"
     fi
 
-    # 3b. the sample graph through the GPU explicitly, with --require-gpu-result.
-    # Without that flag a kernel that produced nothing still writes the CPU
-    # fallback's alignments, which compare equal to a CPU golden and read as a
-    # pass. This step exists to make that impossible.
+    # 3b. il grafo di esempio sulla GPU, con --require-gpu-result: senza quel
+    # flag un kernel che non ha prodotto niente scrive comunque gli allineamenti
+    # della CPU, che combaciano col golden e sembrano un successo.
     run "$LOG/sample_gpu" "$BIN" \
         -g "$PROJ/data/sample_graph.gfa" \
         -s "$PROJ/data/sample_queries.fasta" \
@@ -227,8 +213,8 @@ if has_phase verify; then
         note "sample    FAIL differs from baseline/sample_output.gaf"
     fi
 
-    # 3c. the real thing: ten GGBS datasets x three block sizes against the
-    # frozen CPU goldens produced by cpu_oracle/.
+    # 3c. la cosa vera: dieci dataset GGBS per tre taglie di blocco, contro i
+    # golden CPU congelati prodotti da cpu_oracle/.
     if run "$LOG/regression" python3 "$ROOT/scripts/run_ggbs_gpu_regression.py" \
             --suite all --build-dir "$BUILD_DIR" \
             --output-dir "$OUT_DIR/gpu_results" \
@@ -255,13 +241,13 @@ if has_phase perf; then
             note "gpu       $ds @${t}thr  last-iteration $k"
         done
 
-        # The CPU aligner on the same input, same binary, same penalties: the
-        # only comparison term that is not from another machine.
+        # L'aligner CPU sullo stesso input, stesso binario, stesse penalita':
+        # l'unico termine di paragone che non viene da un'altra macchina.
         run "$LOG/cpu_${ds}" "$BIN" \
             -g "$G/$g.gfa" -s "$Q/$ds.queries" -f "$OUT_DIR/${ds}_cpu.gaf" \
             --backend cpu || note "warn      cpu $ds returned non-zero"
 
-        # A timing is only worth reporting if the run did the whole job.
+        # Un tempo si riporta solo se il run ha fatto tutto il lavoro.
         if [[ -f "$GOLD/${ds}.cpu.gaf" ]]; then
             cmp -s "$OUT_DIR/${ds}_cpu.gaf" "$GOLD/${ds}.cpu.gaf" \
                 && note "cpu       $ds output GOLDEN_OK" \
@@ -274,14 +260,14 @@ fi
 if has_phase profile; then
     section "5. Profiling"
 
-    # ptxas again, standalone: registers, spill and stack for the kernel, with
-    # no build-system noise around it.
+    # ptxas di nuovo, da solo: registri, spill e stack del kernel, senza il
+    # rumore del sistema di build attorno.
     if run "$LOG/ptxas_probe" nvcc -std=c++17 -arch="sm_$ARCH" -O3 \
             -I "$PROJ/src" -I "$PROJ/include" -Xptxas -v \
             -c "$PROJ/src/gpu/align_gpu.cu" -o /dev/null; then
-        # The file compiles five kernels. Attribute the numbers to
-        # theseus_align_batch_kernel by name: taking the last "Used N registers"
-        # in the log reports whichever kernel ptxas happened to emit last.
+        # Il file compila cinque kernel: i numeri vanno attribuiti a
+        # theseus_align_batch_kernel per nome, altrimenti si prende l'ultimo
+        # "Used N registers" del log, cioe' un kernel a caso.
         python3 "$ROOT/scripts/parse_ptxas.py" "$LOG/ptxas_probe.log" \
             > "$LOG/ptxas_kernel.txt" 2>/dev/null || true
         if [[ -s "$LOG/ptxas_kernel.txt" ]]; then
@@ -294,9 +280,9 @@ if has_phase profile; then
     fi
 
     if [[ $USE_NCU -eq 1 ]] && command -v ncu >/dev/null 2>&1; then
-        # --clock-control none: ncu otherwise pins the GPU to its *base* clock
-        # and overrides nvidia-smi -lgc, which changes achieved bandwidth by
-        # nearly 3x and makes the numbers incomparable with the untimed runs.
+        # --clock-control none: altrimenti ncu inchioda la GPU al clock base e
+        # sovrascrive nvidia-smi -lgc, il che cambia la banda di quasi 3x e rende
+        # i numeri non confrontabili con i run non profilati.
         M="gpu__time_duration.sum"
         M="$M,launch__registers_per_thread"
         M="$M,launch__occupancy_limit_registers"
@@ -429,7 +415,7 @@ if any(any(r.get(t) for t in threads) for r in rows):
               "speedup: the host still pays backtrace, alignment construction "
               "and GAF serialisation in both cases.", ""]
 
-# --- occupancy / registers, for theseus_align_batch_kernel specifically
+# --- occupancy e registri, di theseus_align_batch_kernel in particolare
 ptx = read(os.path.join(log_dir, "ptxas_kernel.txt"))
 if ptx.strip():
     vals = dict(l.split("=", 1) for l in ptx.split() if "=" in l)

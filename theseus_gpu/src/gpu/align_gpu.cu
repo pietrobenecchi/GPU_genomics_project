@@ -1,21 +1,6 @@
-/**
- * @file align_gpu.cu
- * @brief Every line of device code the backend has, and nothing else.
- *
- * This is deliberately one translation unit: the kernel's register count is a
- * product of nvcc inlining the whole call chain below into it, so splitting the
- * device code across .cu files would need relocatable device code and would
- * undo that. What is host code -- the workspace, the graph, the batch
- * orchestration -- lives in device_memory.cu and align_batch.cu, which reach
- * the kernels through the wrappers at the bottom of this file.
- *
- * One block owns one query for the whole alignment. Inside the block the phases
- * that are independent per element run across the threads (the invalid-segment
- * aging, the I candidates, the densify of I/D/M, the LCP of the M cells); the
- * phases whose append order defines prev_pos, which is what the goldens compare,
- * stay on thread 0. The per-vertex recurrences it calls live in
- * gpu/align_core.h, shared with the CPU flattening.
- */
+// Tutto il codice device in una sola translation unit: i registri dipendono
+// dall'inlining dell'intera catena. [cat. 1 privatization] Un blocco possiede
+// una query; le fasi che definiscono prev_pos restano sul thread 0.
 
 #include "gpu/align_gpu.h"
 #include "query_state.h"
@@ -31,54 +16,27 @@ namespace gpu {
 
 namespace {
 
-/**
- * @brief Query characters staged in shared memory per block, at most.
- *
- * The query is the one input every M cell of the block reads, and it reads it
- * from the same few hundred bytes over and over: core_lcp walks query[offset..]
- * for every cell of every wavefront. Staging it once per block puts those reads
- * in shared memory instead of going back through L1 each time.
- *
- * Bounded rather than sized on the query because it has to fit in shared memory
- * next to the candidate tile, and a query longer than this simply keeps reading
- * global memory -- the fallback is the previous behaviour, so nothing depends
- * on the bound being generous. 1 KB covers the 100 bp reads of every GGBS
- * dataset with room to spare.
- */
+// Tetto, non taglia: oltre 1 KB la query si legge da global come prima.
+// [cat. 5 tiling] E' l'unico dato che ogni cella M rilegge di continuo:
+// copiarlo una volta per blocco ha portato i registri da 239 a 226.
 constexpr int32_t kQueryTileBytes = 1024;
 
-/**
- * @brief Bytes of dynamic shared memory one block needs.
- *
- * The staging buffers hold exactly one tile, so the requirement scales with the
- * block size instead of with kScopeWavefrontCapacity. The layout here must match
- * the partitioning at the top of theseus_align_batch_kernel.
- *
- * One Cell tile, not two: the M cells are no longer staged in shared memory
- * because the thread that extends a cell writes it straight back to bs_m_wf.
- */
+// Byte di shared memory dinamica per blocco: i buffer di staging tengono un
+// solo tile, quindi scala con la larghezza del blocco e non con
+// kScopeWavefrontCapacity. Il layout deve combaciare con quello del kernel.
 size_t kernel_shared_bytes(int32_t threads_per_block) {
     return static_cast<size_t>(threads_per_block) *
                (sizeof(Cell) + 2 * sizeof(int)) +
            static_cast<size_t>(kQueryTileBytes);
 }
 
-/**
- * @brief One contiguous run of candidates a sparsify half folds into the
- * ScratchPad, described so that any thread can rebuild candidate @p l alone.
- *
- * The three core_sparsify_* helpers differ only in where the source index comes
- * from and whether they overwrite prev_pos/from_matrix, so one description
- * covers all of them:
- *
- *   core_sparsify_indel  dense run, keeps the source cell's prev_pos/from_matrix
- *   core_sparsify_m      dense run, rewrites them to (absolute index, M)
- *   core_sparsify_jumps  indirect run through a jump-position list, rewrites them
- */
+// Una corsa contigua di candidati che una meta' sparsify riversa nella
+// ScratchPad, descritta in modo che ogni thread ricostruisca da solo il
+// candidato l.
 struct SparsifyPart {
-    const Cell *wf;            // source wavefront
-    const int64_t *positions;  // jump positions, null for a dense run
-    int64_t start;             // first index of a dense run
+    const Cell *wf;            // wavefront sorgente
+    const int64_t *positions;  // posizioni dei salti, null in una corsa densa
+    int64_t start;             // primo indice di una corsa densa
     int32_t count;
     int32_t offset_increase;
     int32_t shift_factor;
@@ -86,7 +44,7 @@ struct SparsifyPart {
     Cell::Matrix from_matrix;
 };
 
-/** @brief The runs one sparsify half visits, in the order it visits them. */
+// Le corse che una meta' sparsify visita, nell'ordine in cui le visita.
 struct SparsifyPlan {
     SparsifyPart parts[4];
     int32_t nparts;
@@ -109,18 +67,13 @@ struct ICandidateRanges {
 };
 
 
-/**
- * @brief One block per sequence, the same geometry the alignment kernel uses: a
- * block owns a query and its wavefronts for the whole alignment.
- *
- * For now a block only reports the length of its own sequence, which is enough
- * to prove the offsets survived the upload intact.
- */
+// Sonda di controllo: ogni thread riporta la lunghezza di una sequenza, per
+// dimostrare che gli offset sono arrivati interi sul device.
 __global__ void seq_length_kernel(const int32_t *offsets, int32_t num_seqs,
                                   int32_t *out_seq_lengths) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
+    const int bx = blockIdx.x;
     const int32_t tid = bx * ntx + tx;
     if (tid >= num_seqs) {
         return;
@@ -218,81 +171,58 @@ __device__ bool make_i_candidate(QueryState &qs,
     return candidate.offset <= query_len && new_col <= ranges.upper_bound;
 }
 
-constexpr int32_t kMaxWarps = 8;  // 256 threads, the largest block allowed
+constexpr int32_t kMaxWarps = 8;  // 256 thread, il blocco piu' largo ammesso
 
-/**
- * @brief Everything one block shares while it aligns its query.
- *
- * These are the same objects the kernel used to declare as eighteen separate
- * `__shared__` variables and thread through the call chain one parameter at a
- * time -- align_one alone took seventeen of them, and passed most of them
- * straight down to compute_new_wave, which passed them to process_vertex. What
- * the chain actually shares is one thing: this block's state for this query.
- *
- * Grouping them changes nothing about where they live. The kernel still holds
- * the single instance in shared memory, and the tiles below still point into
- * the dynamic shared memory sized at launch on the block width.
- */
+// Tutto quello che un blocco condivide mentre allinea la sua query.
+// [cat. 6 occupancy] Erano diciotto `__shared__` separate: raggrupparle vale
+// quasi 2x, ma solo insieme a __launch_bounds__ (da sole non servono).
 struct BlockShared {
-    // Loop control, written by thread 0 and read by everyone.
+    // Controllo del loop, scritto dal thread 0.
     int block_continue;
     int block_end;
     int block_score;
     Cell block_end_cell;
 
-    // The vertex the block is on, and the M cells it produced.
+    // Vertice corrente e celle M che ha prodotto.
     int num_active;
     int vertex;
     int64_t range_start;
     int64_t range_end;
 
-    // The ScratchPad window, established once per alignment.
+    // Finestra della ScratchPad, fissata una volta per allineamento.
     int32_t span;
     int32_t clear_start;
 
-    // Built by thread 0, consumed by the whole block after a barrier.
+    // Costruiti dal thread 0, letti dal blocco dopo una barriera.
     ICandidateRanges i_ranges;
     SparsifyPlan sparsify_plan;
     int i_count;
 
-    // Scratch for the block-wide prefix sum and max reduction.
+    // Scratch per prefix sum e riduzione max di blocco.
     int32_t warp_base[kMaxWarps];
     int32_t accum;
 
-    // One entry per thread, in the dynamic shared memory. `tile` is the single
-    // Cell staging buffer: the sparsify halves and the I candidates both use
-    // it, one after the other, never at once. `m_valid` is separate because
-    // extend_and_consume_m_cells is live while a tile is in flight.
+    // Un elemento per thread, in shared dinamica. `tile` e' l'unico staging di
+    // Cell: sparsify e candidati I lo usano in sequenza, mai insieme. `m_valid`
+    // e' separato perche' lavora mentre un tile e' ancora in volo.
     Cell *tile;
     int *tile_valid;
     int *m_valid;
 };
 
 
-/**
- * @brief Allocate one slot per thread whose @p flag is set, in thread order, and
- * return this thread's slot.
- *
- * The aggregation densify has always used, lifted out so the merge phases can
- * reuse it instead of introducing a second scheme: a warp ballot gives the
- * within-warp prefix, then thread 0 folds the (at most 8) warp counts into
- * exclusive bases. @p shared_running is read as the first free slot and left at
- * the first free slot after this call, so consecutive tiles keep numbering
- * where the previous one stopped. That is what makes the slots identical to the
- * positions a serial append in the same order would have produced.
- *
- * Every thread of the block must call it: it contains barriers.
- */
+// Assegna uno slot per ogni thread con flag settato, in ordine di thread: gli
+// indici sono quelli di un append seriale. [cat. 1 privatization] Ballot di
+// warp piu' somma sul thread 0, niente atomiche. Contiene barriere.
 __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
                                       int32_t &shared_running) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
     const int32_t lane = tx & 31;
     const int32_t warp = tx >> 5;
     const int32_t nwarps = (ntx + 31) >> 5;
 
-    // Every thread reaches the ballot, including the ones with flag 0, so the
-    // warp stays converged.
+    // Al ballot arrivano tutti, anche i flag 0: il warp resta convergente.
     const unsigned ballot = __ballot_sync(0xffffffffu, flag != 0);
     const int32_t warp_prefix = __popc(ballot & ((1u << lane) - 1u));
     if (lane == 0) {
@@ -304,7 +234,7 @@ __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
         int32_t acc = shared_running;
         for (int32_t w = 0; w < nwarps; ++w) {
             const int32_t count = shared_warp_base[w];
-            shared_warp_base[w] = acc;   // exclusive base for this warp
+            shared_warp_base[w] = acc;
             acc += count;
         }
         shared_running = acc;
@@ -312,61 +242,21 @@ __device__ int32_t block_prefix_alloc(int flag, int32_t *shared_warp_base,
     __syncthreads();
 
     const int32_t slot = shared_warp_base[warp] + warp_prefix;
-    __syncthreads();   // shared_warp_base is scratch again for the caller
+    __syncthreads();   // shared_warp_base torna scratch per il chiamante
     return slot;
 }
 
-/**
- * @brief Block-parallel replacement for the serial merge of one tile of staged
- * candidates into the ScratchPad.
- *
- * The serial loop is sp_merge_candidate over the tile in index order,
- *
- *     if (sp_off[idx] == -1) append(c.diag);
- *     if (sp_off[idx] < c.offset) { sp_wf[idx] = c; sp_off[idx] = c.offset; }
- *
- * and it has two observable effects, not one.
- *
- * **The winner.** The comparison is strict, so a later candidate with an equal
- * offset never replaces an earlier one: the surviving cell is the candidate with
- * the largest offset and, among equals, the smallest index. Folding the tile to
- * that argmax and then comparing it once against the cell already there gives
- * the same result, because everything already in the cell came from a smaller
- * index and so wins its own ties.
- *
- * **The order of sp_diags.** access_alloc appends the diagonal on first touch,
- * and densify walks sp_diags in that order, so the append order decides the
- * order of the dense wavefront, hence the Ranges, hence the prev_pos of later
- * waves. That is the part a plain "max over offset" would silently get wrong.
- * Here the first toucher is the smallest index among the tile's valid
- * candidates on that diagonal, and the appends are numbered with the same
- * prefix-sum allocator densify uses, so they land exactly where the serial
- * appends would have.
- *
- * The two reductions are done with an O(tile) scan per thread over the staged
- * tile rather than with atomics on an array indexed by diagonal: such an array
- * would need one entry per diagonal over kScratchpadSpan (52 224), which does
- * not fit in shared memory and would cost more to clear than the merge costs to
- * run.
- *
- * The one thing this cannot reproduce is a candidate whose offset is negative.
- * Serially such a candidate leaves the cell at -1, so the *next* candidate on
- * that diagonal appends it a second time; here it would be appended once. Cell
- * offsets are query positions and are never negative, so the case is
- * unreachable — and it is checked rather than assumed: cap_fail fires if it
- * ever happens, instead of the output quietly diverging.
- *
- * Every thread of the block must call it: it contains barriers.
- */
+// Merge di un tile di candidati: riproduce sia il vincitore (offset massimo, a
+// parita' indice minimo) sia l'ordine di append di sp_diags, che decide Range e
+// prev_pos. [cat. 1 privatization] Scansione O(tile), non atomiche. Barriere.
 __device__ void merge_candidate_tile(QueryState &qs, int32_t tile_len,
                                      BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int tx = threadIdx.x;
     const bool mine = tx < tile_len && sh.tile_valid[tx] != 0;
     const int32_t my_diag = mine ? sh.tile[tx].diag : 0;
     const int32_t my_off = mine ? sh.tile[tx].offset : 0;
 
-    // Same guard as sp_merge_candidate: out of window is a capacity failure, and
-    // the candidate neither appends nor writes.
+    // Come sp_merge_candidate: fuori finestra e' un fallimento di capacita'.
     const int32_t idx = my_diag - qs.sp_min_diag;
     const bool in_range = mine && idx >= 0 && idx < kScratchpadSpan;
     if (mine && !in_range) {
@@ -374,7 +264,8 @@ __device__ void merge_candidate_tile(QueryState &qs, int32_t tile_len,
                  kScratchpadSpan);
     }
     if (mine && my_off < 0) {
-        // Unreachable (see above); never silent if it ever becomes reachable.
+        // Un offset e' una posizione nella query, quindi non e' mai negativo:
+        // il caso resta controllato invece che assunto.
         cap_fail(qs, kCapScratchpadSpan, -1, kScratchpadSpan);
     }
 
@@ -396,24 +287,13 @@ __device__ void merge_candidate_tile(QueryState &qs, int32_t tile_len,
         }
     }
 
-    // Read the resting state before any of this tile's writes: a diagonal is
-    // appended only if the cell was still inactive, exactly as access_alloc
-    // decides it. The activity flag is sp_off, not the cell's own offset field.
+    // Stato a riposo, letto prima di ogni scrittura del tile: la diagonale si
+    // accoda solo se la cella era inattiva. Il flag e' sp_off, non l'offset.
     const bool needs_append = is_first && qs.sp_off[idx] == -1;
 
-    // No barrier between that read and the seeding of sh.accum below, and
-    // none after it either. Both used to be here and neither orders anything:
-    //
-    // - the read of sp_off above is separated from the only write to sp_off in
-    //   this function (the winner store at the bottom) by the barrier that
-    //   follows the sp_diags append, which stays. Across tiles the caller's
-    //   staging barrier and this function's trailing barrier do the same job;
-    // - sh.accum is written and read by thread 0 alone -- here and inside
-    //   block_prefix_alloc, which reads it as `shared_running` -- so program
-    //   order on that one thread is all the ordering it has ever needed. No
-    //   other thread of the block touches it, in this function or in densify;
-    // - sh.warp_base, which block_prefix_alloc is about to write, was left
-    //   free by the trailing barrier of its own previous call.
+    // Qui sono state tolte due __syncthreads(): non ordinavano niente. sp_off e'
+    // gia' separato dalla sua unica scrittura dalla barriera dopo l'append, e
+    // sh.accum lo scrive e rilegge solo il thread 0.
     if (tx == 0) {
         sh.accum = qs.sp_ndiags;
     }
@@ -432,8 +312,7 @@ __device__ void merge_candidate_tile(QueryState &qs, int32_t tile_len,
     }
     __syncthreads();
 
-    // One winner per diagonal, so no two threads write the same cell, and the
-    // payload and its offset are written by the same thread.
+    // Un vincitore per diagonale: due thread non scrivono mai la stessa cella.
     if (is_winner && qs.sp_off[idx] < my_off) {
         qs.sp_wf[idx] = sh.tile[tx];
         qs.sp_off[idx] = my_off;
@@ -446,7 +325,7 @@ __device__ void plan_add(SparsifyPlan &plan, const Cell *wf,
                          int32_t offset_increase, int32_t shift_factor,
                          bool rewrite_prev, Cell::Matrix from_matrix) {
     if (count <= 0) {
-        return;   // an empty run contributes nothing and no index space
+        return;
     }
     SparsifyPart &part = plan.parts[plan.nparts];
     part.wf = wf;
@@ -461,12 +340,7 @@ __device__ void plan_add(SparsifyPlan &plan, const Cell *wf,
     plan.total += count;
 }
 
-/**
- * @brief The runs core_next_d_sparsify walks, in its order.
- *
- * Mirrors that function exactly, including that pos_prev_m_scope is computed
- * before the sign test and only used inside it.
- */
+// Le corse che percorre core_next_d_sparsify, nel suo ordine esatto.
 __device__ SparsifyPlan prepare_d_sparsify_plan(QueryState &qs,
                                                 const AlignScoring &scoring,
                                                 int32_t query_len,
@@ -486,14 +360,14 @@ __device__ SparsifyPlan prepare_d_sparsify_plan(QueryState &qs,
     if (pos_prev_d >= 0 && sc_d_pos_size(qs, pos_prev_d) > v_id) {
         const Range r = sc_d_pos(qs, pos_prev_d)[v_id];
         plan_add(plan, sc_d_wf(qs, pos_prev_d), nullptr, r.start,
-                 static_cast<int32_t>(r.end - r.start), 1, -1, false,
+                 range_len(r), 1, -1, false,
                  Cell::Matrix::None);
     }
     if (pos_prev_m >= 0) {
         if (sc_m_pos_size(qs, pos_prev_m) > v_id) {
             const Range r = sc_m_pos(qs, pos_prev_m)[v_id];
             plan_add(plan, qs.bs_m_wf, nullptr, r.start,
-                     static_cast<int32_t>(r.end - r.start), 1, -1, true,
+                     range_len(r), 1, -1, true,
                      Cell::Matrix::M);
         }
         plan_add(plan, qs.bs_m_jumps_wf, vd_m_jumps(qs, v, pos_prev_m_scope), 0,
@@ -503,7 +377,7 @@ __device__ SparsifyPlan prepare_d_sparsify_plan(QueryState &qs,
     return plan;
 }
 
-/** @brief The runs core_next_m_sparsify walks, in its order. */
+// Le corse che percorre core_next_m_sparsify, nel suo ordine.
 __device__ SparsifyPlan prepare_m_sparsify_plan(QueryState &qs,
                                                 const AlignScoring &scoring,
                                                 int32_t query_len,
@@ -522,20 +396,20 @@ __device__ SparsifyPlan prepare_m_sparsify_plan(QueryState &qs,
     if (sc_d_pos_size(qs, score) > v_id) {
         const Range r = sc_d_pos(qs, score)[v_id];
         plan_add(plan, sc_d_wf(qs, score), nullptr, r.start,
-                 static_cast<int32_t>(r.end - r.start), 0, 0, false,
+                 range_len(r), 0, 0, false,
                  Cell::Matrix::None);
     }
     if (sc_i_pos_size(qs, score) > v_id) {
         const Range r = sc_i_pos(qs, score)[v_id];
         plan_add(plan, sc_i_wf(qs, score), nullptr, r.start,
-                 static_cast<int32_t>(r.end - r.start), 0, 0, false,
+                 range_len(r), 0, 0, false,
                  Cell::Matrix::None);
     }
     if (pos_prev_m >= 0) {
         if (sc_m_pos_size(qs, pos_prev_m) > v_id) {
             const Range r = sc_m_pos(qs, pos_prev_m)[v_id];
             plan_add(plan, qs.bs_m_wf, nullptr, r.start,
-                     static_cast<int32_t>(r.end - r.start), 1, 0, true,
+                     range_len(r), 1, 0, true,
                      Cell::Matrix::M);
         }
         plan_add(plan, qs.bs_m_jumps_wf, vd_m_jumps(qs, v, pos_prev_m_scope), 0,
@@ -545,10 +419,8 @@ __device__ SparsifyPlan prepare_m_sparsify_plan(QueryState &qs,
     return plan;
 }
 
-/**
- * @brief Rebuild candidate @p idx of a plan, and say whether it passes the
- * filter every core_sparsify_* applies before touching the ScratchPad.
- */
+// Ricostruisce il candidato idx di un piano e dice se passa il filtro che ogni
+// core_sparsify_* applica prima di toccare la ScratchPad.
 __device__ bool make_sparsify_candidate(const SparsifyPlan &plan, int32_t idx,
                                         Cell &out) {
     int32_t local = idx;
@@ -575,27 +447,17 @@ __device__ bool make_sparsify_candidate(const SparsifyPlan &plan, int32_t idx,
     return false;
 }
 
-/**
- * @brief Block-wide max, returned to every thread.
- *
- * max is associative and commutative and the values are exact int32, so the
- * result does not depend on the reduction order: this is the same number the
- * serial scan produced. Shaped like the prefix sum in densify (warp reduction,
- * then a fold over the at most 8 warp results on thread 0) and it borrows the
- * same @p shared_warp_base scratch, which nothing else is using at the point in
- * align_one where this runs.
- *
- * Every thread of the block must call it: it contains barriers.
- */
+// Massimo di blocco, restituito a tutti i thread: max e' associativo, quindi
+// l'ordine della riduzione da' lo stesso numero della scansione seriale.
+// Riusa lo scratch shared_warp_base. Contiene barriere.
 __device__ int32_t block_reduce_max(int32_t value, int32_t *shared_warp_base) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
     const int32_t lane = tx & 31;
     const int32_t warp = tx >> 5;
     const int32_t nwarps = (ntx + 31) >> 5;
 
-    // ntx is 64, 128 or 256, so every warp is full and the whole mask is
-    // the right one.
+    // ntx e' 64, 128 o 256: ogni warp e' pieno e la maschera piena e' giusta.
     for (int32_t delta = 16; delta > 0; delta >>= 1) {
         const int32_t other = __shfl_down_sync(0xffffffffu, value, delta);
         if (other > value) {
@@ -619,58 +481,25 @@ __device__ int32_t block_reduce_max(int32_t value, int32_t *shared_warp_base) {
     __syncthreads();
 
     const int32_t result = shared_warp_base[0];
-    __syncthreads();   // shared_warp_base is scratch again for the caller
+    __syncthreads();   // shared_warp_base torna scratch per il chiamante
     return result;
 }
 
-/**
- * @brief Block-parallel replacement for the densify loops of I, D and M.
- *
- * The serial form walks the active diagonals, keeps those still valid for this
- * vertex and appends them in order. That is a filter followed by a stream
- * compaction, and the test (vd_valid_diagonal) is a read-only scan of the
- * vertex's invalid segments, so every diagonal can be tested independently.
- * Only the write position is shared, and an exclusive prefix sum reproduces the
- * serial positions exactly, which is what keeps the output byte-identical.
- *
- * The prefix sum is a warp ballot plus a scan over the (at most 8) warp totals,
- * so it needs no external scan primitive and 9 ints of shared memory.
- *
- * Overflow keeps the serial semantics: elements that do not fit are dropped and
- * cap_fail records the buffer with the size the first failing push would have
- * reported. @p track_peak mirrors sc_wf_push updating sc_peak_wf, which
- * bs_push_back does not do.
- */
+// Densify di I, D e M in parallelo: filtro indipendente per diagonale piu' una
+// prefix sum esclusiva, che riproduce le posizioni seriali e tiene l'output
+// byte-identico. In overflow si scarta e cap_fail registra il buffer.
 __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
                          Cell *wf, int32_t &wf_size, int32_t capacity,
                          CapBuffer cap_buffer, bool track_peak,
                          BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    const int32_t ndiags = qs.sp_ndiags;   // uniform: densify never touches it
-    const int32_t range_start = wf_size;   // read before thread 0 updates it
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
+    const int32_t ndiags = qs.sp_ndiags;   // uniforme: densify non lo tocca mai
+    const int32_t range_start = wf_size;   // letto prima che il thread 0 lo aggiorni
 
-    // An empty scratchpad is the common case, not an edge case: instrumenting
-    // the CPU path -- same QueryState, same wavefronts, byte-identical output --
-    // over the four datasets gives 46-47 % of densify calls with ndiags == 0
-    // (c4_err 4876 of 10 707, c4_err_2k 19 424 of 41 400, ebola_err_2k 19 694 of
-    // 41 568, and c4_exact 1551 of 1551).
-    //
-    // With nothing to densify the rest of this function is two __syncthreads()
-    // and a shared write that produce exactly this Range: total is 0, so
-    // written is 0, so wf_size stays at range_start. Returning here is the same
-    // value for two barriers less.
-    //
-    // The peak does not move either, which is the one thing skipped that writes
-    // state: sc_peak_wf is the largest size any push has ever reached, and
-    // range_start is the current size of a wavefront that got there by pushing,
-    // so range_start <= sc_peak_wf always and the guarded update is already a
-    // no-op. The serial code agrees -- sc_wf_push touches the peak only when it
-    // actually pushes.
-    //
-    // Every thread returns or none does: ndiags is uniform at entry, which the
-    // loop below has always required -- a thread reading a different value
-    // would run a different number of barriers.
+    // ScratchPad vuota nel 46-47 % delle chiamate, 100 % su c4_exact: uscire
+    // subito da' lo stesso Range con due barriere in meno. Escono tutti i
+    // thread o nessuno, perche' ndiags e' uniforme all'ingresso.
     if (ndiags == 0) {
         Range empty;
         empty.start = range_start;
@@ -703,12 +532,8 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
                 wf[pos] = value;
             }
         }
-        // No barrier closing the tile. It used to be here to keep the next
-        // tile's `sh.warp_base[warp] = __popc(ballot)` from overtaking this
-        // tile's readers, but block_prefix_alloc already ends on a barrier for
-        // exactly that reason, and it is the last thing to touch that array.
-        // The wavefront stores above need no barrier either: nothing reads wf
-        // until the barrier after the loop.
+        // Nessuna barriera a chiudere il tile: block_prefix_alloc finisce gia'
+        // con una, e wf non lo legge nessuno prima della barriera dopo il loop.
     }
 
     if (tx == 0) {
@@ -732,45 +557,16 @@ __device__ Range densify(QueryState &qs, Cell::Matrix matrix, int32_t v,
     return r;
 }
 
-/**
- * @brief Block-parallel sp_reset.
- *
- * sp_diags holds each touched diagonal once (access_alloc appends only on the
- * first touch), so the entries address distinct cells: no two threads write the
- * same one, and they all write the same -1. The list is only emptied after the
- * barrier, so nobody clears a diagonal another thread has not read yet.
- *
- * Every thread of the block must call it: it contains barriers.
- */
-/**
- * @brief Fill base[begin, end) with @p value, four words per thread per step.
- *
- * Thread coarsening on the one phase that is still the kernel's largest: after
- * the hot/cold split the clear is 57-69 % of the cycles of a simple-tier query
- * (`c4_exact` 62,7 M against 27,6 M for the whole score loop) because it is one
- * word for each of the 52 224 diagonals of the window. The words are contiguous
- * and all get the same value, so the loop is free to hand each thread four of
- * them at once and write them as a single 128-bit store: four times fewer store
- * instructions and four times fewer trips round the loop, on a kernel whose
- * duration tracks instructions issued rather than bytes moved.
- *
- * The alignment is checked rather than assumed. sp_off sits at a 16-byte
- * boundary inside QueryState, but sizeof(QueryState) is 8 modulo 16, so every
- * other state in the array starts 8 bytes off and an int4 store there would
- * fault. `begin` moves with the query window too. So the vector range is
- * derived from the address at run time and the ragged ends are filled one word
- * at a time -- at most three words at each end, against 52 224 in the middle.
- *
- * The three loops need no barrier between them: they cover disjoint ranges, and
- * every thread writes the same value to a word no other thread writes.
- */
+// Riempie base[begin, end) con value. [cat. 2 thread coarsening] Quattro parole
+// per thread in una sola store int4: -38 % istruzioni e 1,27x su c4_exact.
+// L'allineamento e' verificato, non assunto: uno stato su due parte sfasato.
 __device__ inline void fill_words(int32_t *base, int32_t begin, int32_t end,
                                   int32_t value, int32_t tx, int32_t ntx) {
     if (begin >= end) {
         return;
     }
-    // Words to skip before the first 16-byte boundary. The array is int32, so
-    // the byte misalignment is always a multiple of 4 and this is exact.
+    // Parole da saltare prima del primo confine a 16 byte. L'array e' int32,
+    // quindi il disallineamento e' sempre multiplo di 4 e il conto e' esatto.
     const uintptr_t addr = reinterpret_cast<uintptr_t>(base + begin);
     const int32_t skip = static_cast<int32_t>((16u - (addr & 15u)) & 15u) >> 2;
     int32_t vec_begin = begin + skip;
@@ -793,22 +589,16 @@ __device__ inline void fill_words(int32_t *base, int32_t begin, int32_t end,
     }
 }
 
+// sp_reset in versione parallela di blocco. sp_diags contiene ogni diagonale
+// toccata una volta sola, quindi le entry indirizzano celle distinte.
+// Lo chiamano tutti i thread del blocco: contiene barriere.
 __device__ void sp_reset_block(QueryState &qs) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    const int32_t ndiags = qs.sp_ndiags;   // uniform: nothing writes it here
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
+    const int32_t ndiags = qs.sp_ndiags;   // uniforme: qui non lo scrive nessuno
 
-    // Nothing touched, nothing to reset -- and that is the common case, not an
-    // edge case: the same histogram densify's early return is built on says the
-    // ScratchPad is empty on 46-47 % of the calls (100 % on c4_exact). With
-    // ndiags == 0 the loop below is empty and `qs.sp_ndiags = 0` writes 0 over
-    // 0, so all this function does is two block-wide rendezvous. Returning here
-    // leaves exactly the same state for two barriers less, and process_vertex
-    // calls it three times per vertex per score.
-    //
-    // Every thread returns or none does: ndiags is uniform at entry, which the
-    // loop below has always required -- sp_ndiags is written only by thread 0
-    // inside merge_candidate_tile, published by the barrier that follows it.
+    // Stessa uscita anticipata di densify, e qui pesa di piu': process_vertex
+    // chiama questa funzione tre volte per vertice per score.
     if (ndiags == 0) {
         return;
     }
@@ -823,21 +613,13 @@ __device__ void sp_reset_block(QueryState &qs) {
     __syncthreads();
 }
 
-/**
- * @brief Fold a whole sparsify plan into the ScratchPad, one tile at a time.
- *
- * Tiled for the same reason the I candidates are: the staging buffers are sized
- * on the block, not on the candidate space, and the ScratchPad state carries
- * over from one tile to the next so the index order across tiles is preserved.
- *
- * Every thread of the block must call it: it contains barriers.
- */
+// Riversa un piano di sparsify nella ScratchPad un tile alla volta: i buffer di
+// staging sono dimensionati sul blocco, non sui candidati, e lo stato passa da
+// un tile al successivo. Contiene barriere.
 __device__ void run_sparsify_plan(QueryState &qs, const SparsifyPlan &plan,
                                   BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    // Uniform: the plan lives in shared memory, written by thread 0 before the
-    // barrier that got us here.
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
     const int32_t count = plan.total;
 
     for (int32_t tile_start = 0; tile_start < count; tile_start += ntx) {
@@ -860,7 +642,7 @@ __device__ void run_sparsify_plan(QueryState &qs, const SparsifyPlan &plan,
 
 __device__ Range finish_i_wavefront(QueryState &qs, int32_t score, int32_t v,
                                     BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int tx = threadIdx.x;
     const Range new_range =
         densify(qs, Cell::Matrix::I, v, sc_i_wf(qs, score),
                 sc_i_wf_size(qs, score), kScopeWavefrontCapacity,
@@ -868,31 +650,14 @@ __device__ Range finish_i_wavefront(QueryState &qs, int32_t score, int32_t v,
     if (tx == 0) {
         sc_pos_push(qs, sc_i_pos(qs, score), sc_i_pos_size(qs, score), new_range);
     }
-    // No barrier after the push. sc_i_pos and its size are written by thread 0
-    // and read by thread 0 -- core_check_and_store_jumps below, then next
-    // vertex's prepare_i_candidate_ranges -- so program order covers them. The
-    // cells of sc_i_wf that other threads just wrote are published by densify's
-    // own closing barrier, which is still there. new_range is a return value:
-    // every thread already holds its own copy.
+    // Nessuna barriera dopo la push: sc_i_pos lo scrive e lo rilegge il thread 0,
+    // e le celle di sc_i_wf le pubblica gia' la barriera finale di densify.
     return new_range;
 }
 
-/**
- * @brief Build the I candidates for one vertex and merge them into the scratchpad.
- *
- * The candidate space is consumed one tile of ntx elements at a time, the
- * same way extend_and_consume_m_cells consumes the M range. Staging a
- * tile rather than the whole candidate space is what lets the shared buffers be
- * sized on the block instead of on kScopeWavefrontCapacity, and it removes the
- * capacity ceiling that used to abort the alignment when a vertex produced more
- * than kScopeWavefrontCapacity candidates.
- *
- * Candidates can collide on a diagonal, so the merge is not a plain scatter:
- * merge_candidate_tile reproduces both effects the serial order had, the winner
- * and the append order of sp_diags. Tiling preserves the index order exactly,
- * and the merge is done per tile because the ScratchPad state carries over from
- * one tile to the next.
- */
+// Candidati I di un vertice, fusi un tile di ntx alla volta: toglie il tetto
+// che abortiva sopra kScopeWavefrontCapacity candidati. Possono collidere su
+// una diagonale, quindi il merge non e' uno scatter: lo fa merge_candidate_tile.
 __device__ void generate_and_merge_i_candidates(QueryState &qs,
                                                 const AlignScoring &scoring,
                                                 const char *query,
@@ -900,8 +665,8 @@ __device__ void generate_and_merge_i_candidates(QueryState &qs,
                                                 const GraphCsrView &graph,
                                                 int32_t score, int32_t v,
                                                 BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
 
     if (tx == 0) {
         sh.i_ranges = prepare_i_candidate_ranges(qs, scoring, graph,
@@ -910,8 +675,7 @@ __device__ void generate_and_merge_i_candidates(QueryState &qs,
     }
     __syncthreads();
 
-    // Uniform across the block: written by thread 0 before the barrier above, so
-    // every thread runs the same number of tiles and reaches the same barriers.
+    // Uniforme nel blocco: tutti fanno lo stesso numero di tile e di barriere.
     const int32_t count = sh.i_count;
 
     for (int32_t tile_start = 0; tile_start < count; tile_start += ntx) {
@@ -934,10 +698,9 @@ __device__ void generate_and_merge_i_candidates(QueryState &qs,
 
     const Range new_range = finish_i_wavefront(qs, score, v, sh);
     if (tx == 0) {
-        // Same tail as the CPU's next_I: the I cells that just reached the last
-        // column of this vertex open jumps into its neighbours.
-        // core_store_m_jump can hit the end condition, so the block's end state
-        // has to travel through here too.
+        // Stessa coda della next_I della CPU: le celle I arrivate all'ultima
+        // colonna aprono i salti verso i vicini. Mancava nel port, ed era il bug
+        // che teneva bloccato il tier complex.
         if (edge_begin(graph, v) < edge_end(graph, v)) {
             bool end = sh.block_end != 0;
             Cell end_cell = sh.block_end_cell;
@@ -951,29 +714,14 @@ __device__ void generate_and_merge_i_candidates(QueryState &qs,
     __syncthreads();
 }
 
-/**
- * @brief core_lcp with a warp on one cell instead of a thread on one cell.
- *
- * The serial version walks the match one character at a time. Here the 32 lanes
- * compare 32 characters at once, a ballot turns that into a mask, and the
- * number of *leading* set bits is how far the match runs: the first zero is the
- * first mismatch, so __ffs on the complement gives the advance directly. The
- * loop repeats while a whole chunk matched.
- *
- * It returns exactly what core_lcp returns -- the same offset and the same j --
- * because the advance is the length of the leading run of matches, never a
- * count of matching lanes: a mismatch at lane k stops it at k whatever lanes
- * k+1.. say. Endpoint, ordering, jump behaviour and tie-breaking are decided by
- * the caller from those two values and are untouched.
- *
- * Every lane of the warp must call it, with the same cell, and offset/j must be
- * uniform across the warp on entry: it contains __ballot_sync.
- */
+// core_lcp con un warp per cella. [cat. 4 divergenza] 32 caratteri per ballot,
+// __ffs sul complemento: stesso offset e stesso j del seriale, perche' conta la
+// corsa iniziale. Lane uniformi all'ingresso: contiene __ballot_sync.
 __device__ inline void warp_lcp(const char *query, int32_t query_len,
                                 const GraphCsrView &graph, int32_t v,
                                 int32_t &offset, int32_t &j) {
     const int32_t n = vertex_len(graph, v);
-    const int32_t lane = static_cast<int32_t>(threadIdx.x) & 31;
+    const int lane = threadIdx.x & 31;
     for (;;) {
         const int32_t room_q = query_len - offset;
         const int32_t room_v = n - j;
@@ -998,74 +746,9 @@ __device__ inline void warp_lcp(const char *query, int32_t query_len,
     }
 }
 
-/**
- * @brief The score-0 seed extension, with the LCP shared across warp 0.
- *
- * On a read that matches the graph this is the whole alignment: the LCP walks
- * the length of the query, and it used to walk it one character at a time on
- * thread 0 while the rest of the block sat at the barrier that follows.
- * c4_exact spends 814 us executing 3.7 M instructions, which is what waiting
- * for one lane looks like.
- *
- * The warp advances the seed cell first; thread 0 then runs the ordered chain
- * exactly as it was. That is sound because core_lcp is idempotent: it advances
- * offset and j together while the characters match and stops at the first
- * mismatch or boundary, so running it from a position it has already reached
- * advances nothing. core_extend_diagonal recomputes j as diag + offset, and
- * warp_lcp moved both by the same amount, so it recomputes the same j.
- * Everything the chain decides afterwards -- the end check, the jump condition,
- * the DFS over out-edges, the append order -- is a function of that final
- * (offset, j) pair, and the pair is identical. Nothing ordered moves.
- *
- * Only the seed's own LCP is shared out. The LCPs inside the recursion stay
- * serial: they belong to cells the DFS has not created yet, and on the exact
- * tier the recursion is usually not entered at all, because a read that ends
- * inside its vertex never reaches the last column.
- *
- * __noinline__ for the reason process_vertex carries it. Inlined here, the live
- * set of warp_lcp stays alive across the whole of align_one and the kernel goes
- * from 138 registers to 170 -- past the boundary at which a T4 SM holds 14
- * warps rather than 11. Its own frame costs nothing measurable: it is entered
- * once per query.
- *
- * Warp 0 only, all 32 lanes, so it must be called under a warp-uniform
- * condition: it contains __ballot_sync and no __syncthreads.
- */
-/**
- * @brief How far the score-0 seed cell extends, computed across warp 0.
- *
- * On a read that matches the graph the seed extension is the whole alignment:
- * the LCP walks the length of the query, and it used to walk it one character
- * at a time on thread 0 while the rest of the block sat at the barrier that
- * follows. c4_exact spends 814 us executing 3.7 M instructions, which is what
- * waiting for one lane looks like.
- *
- * Only the *measurement* moves here, never the ordered work: this returns an
- * offset and writes nothing. The caller then runs the existing thread-0 chain
- * unchanged, and that is sound because core_lcp is idempotent -- it advances
- * offset and j together while characters match and stops at the first mismatch
- * or boundary, so running it from a position it has already reached advances
- * nothing. core_extend_diagonal recomputes j as diag + offset, and warp_lcp
- * moved both by the same amount, so it recomputes the same j. Everything the
- * chain decides afterwards -- the end check, the jump condition, the DFS over
- * out-edges, the append order -- is a function of that final (offset, j) pair,
- * and the pair is identical.
- *
- * Only the seed's own LCP is shared out. The LCPs inside the recursion stay
- * serial: they belong to cells the DFS has not created yet, and on the exact
- * tier the recursion is usually not entered at all, because a read that ends
- * inside its vertex never reaches the last column.
- *
- * __noinline__, and drawn exactly this narrow, for the reason process_vertex
- * carries it. Inlined into align_one, warp_lcp's live set stays alive across
- * the whole score loop and the kernel goes 138 -> 170 registers, past the
- * boundary where a T4 SM holds 14 warps instead of 11. Wrapping the ordered
- * chain in the same frame is worse still, 177. Wrapping the LCP alone -- which
- * takes five scalars and returns one -- keeps the kernel at 138 with no spill.
- *
- * Warp 0 only, all 32 lanes, so the caller's condition must be warp-uniform:
- * this contains __ballot_sync and no __syncthreads.
- */
+// Estensione del seed a score 0 sul warp 0: sposta solo la *misura*, la catena
+// ordinata resta identica. [cat. 4 divergenza] 1,37-1,38x sul tier simple.
+// [cat. 6 occupancy] __noinline__ stretta, altrimenti 138 -> 170 registri.
 __device__ __noinline__ int32_t warp_seed_offset(const char *query,
                                                  int32_t query_len,
                                                  const GraphCsrView &graph,
@@ -1084,13 +767,12 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
                                            int64_t range_start,
                                            int64_t range_end,
                                            BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
 
-    // One warp per cell rather than one thread per cell: the tile is nwarps
-    // wide instead of ntx wide, and the 32 lanes of a warp share the LCP of a
-    // single cell. Both `active` and the cell are uniform across a warp, so the
-    // warp never diverges around the ballot inside warp_lcp.
+    // [cat. 4 divergenza] Un warp per cella invece di un thread per cella: il
+    // tile e' largo nwarps e le 32 lane si dividono l'LCP di una cella sola.
+    // La cella e' uniforme sul warp, quindi non diverge dentro warp_lcp.
     const int32_t lane = tx & 31;
     const int32_t warp_id = tx >> 5;
     const int32_t nwarps = ntx >> 5;
@@ -1102,13 +784,9 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
             Cell cell = qs.bs_m_wf[idx];
             int32_t j = cell.diag + cell.offset;
             warp_lcp(query, query_len, graph, cell.vertex_id, cell.offset, j);
-            // The extending warp writes its own cell back, from lane 0. The
-            // serial loop below used to do it lane by lane, so a cell was
-            // visible in bs_m_wf only once the loop reached it; writing the
-            // whole tile up front is invisible because nothing that loop calls
-            // reads bs_m_wf. core_store_m_jump and the core_extend_diagonal
-            // recursion under it push into bs_m_jumps_wf and bs_i_jumps_wf
-            // only, and each iteration reads just the cell it is on.
+            // Il warp che ha esteso riscrive la sua cella, dalla lane 0.
+            // Scrivere il tile in anticipo non si vede: il loop seriale qui
+            // sotto non legge bs_m_wf.
             if (lane == 0) {
                 qs.bs_m_wf[idx] = cell;
                 sh.m_valid[warp_id] = 1;
@@ -1121,8 +799,7 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
         if (tx == 0) {
             bool end = sh.block_end != 0;
             Cell end_cell = sh.block_end_cell;
-            // Same cells in the same index order as before, so the serial pass
-            // sees exactly the sequence it used to.
+            // Stesse celle nello stesso ordine di indice della versione seriale.
             for (int32_t w = 0; w < nwarps; ++w) {
                 if (sh.m_valid[w] == 0) {
                     continue;
@@ -1145,33 +822,9 @@ __device__ void extend_and_consume_m_cells(QueryState &qs,
     }
 }
 
-// __noinline__ is the whole optimisation here, and it is worth 88 registers.
-//
-// align_one inlines compute_new_wave, which inlines this, which inlines
-// generate_and_merge_i_candidates, run_sparsify_plan, densify twice and
-// extend_and_consume_m_cells. Those phases are disjoint in time -- each ends on
-// a __syncthreads() before the next begins -- but the compiler sees one body,
-// so the temporaries of one phase stay live across the others and the kernel
-// pays for the union of every phase's live set at once. Cutting the chain here
-// makes the register allocator treat the per-vertex work as its own frame:
-//
-//   ptxas -v, sm_75, theseus_align_batch_kernel
-//     inlined        226 registers, 736 B stack, 0 spill  ->  8 warps/SM, 25 %
-//     __noinline__   138 registers, 768 B stack, 0 spill  -> 14 warps/SM, 43 %
-//
-// This is the "natural" reduction of the live set the brief asks for, and it
-// beats -maxrregcount=168, which buys 12 warps but pays 72 B of spill stores
-// per thread; here the extra cost is 32 bytes of stack frame and one ABI call
-// per active vertex per score, against a body that loops over its wavefront.
-//
-// The cut has to be exactly here. Marking the phases below it instead gives
-// 168-176 registers, and marking them *as well as* this one gives 168-169: the
-// win comes from one frame boundary at the top of the per-vertex work, not
-// from more of them.
-//
-// process_vertex calls __syncthreads(), so every thread of the block must call
-// it -- which it does: compute_new_wave calls it outside any divergent branch,
-// once per active vertex, uniformly across the block.
+// [cat. 6 occupancy] Il __noinline__ vale 88 registri: sm_75, inlinata 226,
+// tagliata 138, 0 spill in entrambi i casi e +21 % su c4_err_2k. Il taglio va
+// esattamente qui: sulle fasi sotto da' 168-176. Chiama __syncthreads().
 __device__ __noinline__ void process_vertex(QueryState &qs,
                                const AlignScoring &scoring,
                                const char *query,
@@ -1180,12 +833,10 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
                                int32_t score,
                                int32_t v,
                                BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int tx = threadIdx.x;
 
-    // Seeded without a barrier: shared_range_* is read only by
-    // extend_and_consume_m_cells at the bottom of this function, and the
-    // barrier that publishes the conditional overwrite just above it publishes
-    // this default too. Nothing between here and there looks at either field.
+    // Senza barriera: sh.range_* lo legge solo extend_and_consume_m_cells in
+    // fondo, dietro una barriera che pubblica anche questo default.
     if (tx == 0) {
         sh.range_start = 0;
         sh.range_end = 0;
@@ -1194,8 +845,6 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
     generate_and_merge_i_candidates(qs, scoring, query, query_len, graph,
                                     score, v, sh);
 
-    // Reset, sparsify and densify are all block-wide now. Only the plan itself
-    // is built on thread 0, and it is a handful of scalar reads.
     sp_reset_block(qs);
     if (tx == 0) {
         sh.sparsify_plan =
@@ -1212,19 +861,9 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
             sc_pos_push(qs, sc_d_pos(qs, score), sc_d_pos_size(qs, score), d_range);
         }
     }
-    // No barrier closing the D phase, and none closing the M phase below. What
-    // it looked like it was ordering is ordered elsewhere:
-    //
-    // - the cells other threads wrote into sc_d_wf are published by densify's
-    //   own closing barrier, so the reads of them in the M sparsify below see
-    //   them;
-    // - sc_d_pos and its size are written and read by thread 0 alone
-    //   (prepare_m_sparsify_plan is the next reader), so program order covers
-    //   them;
-    // - thread 0 overwriting sh.sparsify_plan cannot overtake another
-    //   thread still reading the D plan, because every such read happens inside
-    //   run_sparsify_plan's tile loop and merge_candidate_tile ends each tile
-    //   on a block-wide barrier.
+    // Nessuna barriera a chiudere la fase D, ne' la M qui sotto: le celle le
+    // pubblica la barriera finale di densify, sc_d_pos lo tocca solo il thread 0
+    // e ogni tile di run_sparsify_plan finisce gia' su una barriera.
 
     sp_reset_block(qs);
     if (tx == 0) {
@@ -1241,9 +880,6 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
             sc_pos_push(qs, sc_m_pos(qs, score), sc_m_pos_size(qs, score), m_range);
         }
     }
-    // Same three arguments as after the D phase. The reader of bs_m_wf is
-    // extend_and_consume_m_cells, which sits behind the barrier that publishes
-    // shared_range_*; the reader of sc_m_pos is thread 0, just below.
 
     sp_reset_block(qs);
     if (tx == 0) {
@@ -1262,18 +898,12 @@ __device__ __noinline__ void process_vertex(QueryState &qs,
     __syncthreads();
 }
 
-/**
- * @brief Block-parallel vd_expand + vd_compact.
- *
- * Both walk the active vertices and touch only vertex `a`'s own segment arrays
- * and sizes, so the vertices are independent and one thread can own each. The
- * two passes are fused per vertex for the same reason: nothing vertex `a` reads
- * is written by any other vertex. Neither pass changes vd_num_active, so the
- * loop bound is stable.
- */
+// vd_expand + vd_compact in versione parallela di blocco: toccano solo gli array
+// del vertice `a`, quindi i vertici sono indipendenti, ne basta uno per thread e
+// le due passate si possono fondere.
 __device__ void expand_and_compact(QueryState &qs, BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
     const int num_active = qs.vd_num_active;
     const int g = qs.vd_gape;
     for (int a = tx; a < num_active; a += ntx) {
@@ -1301,7 +931,7 @@ __device__ void compute_new_wave(QueryState &qs,
                                  const GraphCsrView &graph,
                                  int32_t score,
                                  BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
+    const int tx = threadIdx.x;
 
     expand_and_compact(qs, sh);
 
@@ -1322,12 +952,11 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
                           int32_t start_offset,
                           AlignResult &result,
                           BlockShared &sh) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
 
-    // The longest vertex of the graph, which sizes the ScratchPad window: a max
-    // over the whole graph, so the block reduces it instead of thread 0 scanning
-    // num_vertices on its own.
+    // Il vertice piu' lungo del grafo dimensiona la finestra della ScratchPad:
+    // e' un max su tutto il grafo, quindi lo riduce il blocco, non il thread 0.
     int32_t local_max_diag = 0;
     for (int32_t v = tx; v < graph.num_vertices; v += ntx) {
         const int32_t n = vertex_len(graph, v);
@@ -1339,15 +968,13 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
 
     if (tx == 0) {
         qs.capacity_exceeded = false;
-        // cap_fail keeps the *first* failure, so it tests cap_reason against
-        // kCapNone: leaving it at whatever the previous batch put there would
-        // both hide a real failure and report a stale buffer name. It used to be
-        // established by the per-batch cudaMemset of the whole QueryState array,
-        // which no longer runs.
+        // cap_fail tiene il *primo* fallimento e confronta cap_reason con
+        // kCapNone: lasciarci quello del batch prima nasconderebbe un fallimento
+        // vero. Lo azzerava il cudaMemset per batch, che non c'e' piu'.
         qs.cap_reason = kCapNone;
         qs.cap_required = 0;
         qs.cap_available = 0;
-        // Scalar halves only; the block runs both clearing loops below.
+        // Solo le meta' scalari: i due loop di pulizia li fa il blocco qui sotto.
         sh.span = sp_init_window(qs, -query_len, max_diag);
         sh.clear_start = sp_clear_start(qs, sh.span);
         sc_init(qs, scoring.nscores);
@@ -1359,42 +986,13 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     }
     __syncthreads();
 
-    // Both bounds are uniform (sh.span written before the barrier,
-    // graph.num_vertices a kernel argument), so every thread runs the same
-    // number of iterations. The stores are independent and all write the same
-    // value, so the result does not depend on which thread clears which entry.
-    //
-    // vd_init and vd_new_alignment clear the same prefix of vd_vertex_to_idx to
-    // the same -1, one right after the other, so the two loops collapse into
-    // this one pass with no change to the state either produced.
+    // Limiti uniformi e store indipendenti che scrivono tutte lo stesso valore:
+    // non conta chi pulisce cosa. vd_init e vd_new_alignment azzeravano lo stesso
+    // prefisso allo stesso -1, quindi qui collassano in una passata sola.
     const int32_t vd_fill = vd_map_fill_count(graph.num_vertices);
-    // One word per diagonal: the offsets alone. This loop is the kernel's
-    // single largest memory consumer -- sh.span entries per query, 52 107
-    // of them on c4, and Nsight put it at 44 % of the cycles of a c4_err block
-    // and 71 % of a c4_exact one -- so what it does *not* write is the point.
-    //
-    // It used to write whole Cells, six words each, four of which are the -1
-    // sentinel of fields nothing reads while the cell is inactive. Two rounds
-    // of this: the first (commit 00ea1ef) kept the six words but stored them as
-    // words rather than as a struct, because at a 24-byte stride each warp-wide
-    // field store reached across the whole 768-byte span the warp's cells
-    // occupy and paid for every 32-byte sector once per field -- 61.2 M store
-    // sectors from 2.74 M requests, 22.3 per request. Storing words dropped
-    // that to 25.1 M and 4.8, halved DRAM traffic, and left the kernel's
-    // duration untouched: it is not bandwidth-bound.
-    //
-    // This round drops five of the six words instead of making them cheaper.
-    // The offset moved into sp_off, its own dense array, and it is the only
-    // thing the clear has to establish, because it is the only thing read of an
-    // inactive cell -- which sp_reset has always relied on, clearing the offset
-    // alone between scores. sp_wf is left exactly as the previous query left
-    // it; nothing reads a cell before making it active, and making it active
-    // writes it whole. Stores per query go from 6 x span to 1 x span, and the
-    // warp writes 128 contiguous bytes over four sectors, none touched twice.
-    // ... and, from here, only the entries no earlier query on this QueryState
-    // has cleared: see sp_clear_start. On a batch where every state is used
-    // once this is the whole window, exactly as before; where a state is reused
-    // the second query onwards clears nothing at all.
+    // [cat. 3 coalescing] Il clear era il 44-71 % dei cicli: ora stabilisce solo
+    // sp_off, da 6 x span a 1 x span per query, fino a 7,86x. Sopra ci sta il
+    // clear pigro (sp_clear_start): 5,1x sul tier simple.
     fill_words(qs.sp_off, sh.clear_start, sh.span, -1, tx, ntx);
     fill_words(qs.vd_vertex_to_idx, 0, vd_fill, -1, tx, ntx);
     __syncthreads();
@@ -1431,39 +1029,16 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
             break;
         }
 
-        // The score-0 seed extension. On a read that matches the graph this is
-        // the whole alignment: the LCP walks the length of the query, and it
-        // used to walk it one character at a time on thread 0 while the rest of
-        // the block sat at the barrier below. c4_exact spends 814 us executing
-        // 3.7 M instructions, which is what waiting for one lane looks like.
-        //
-        // Warp 0 now advances the seed cell cooperatively before thread 0 runs
-        // the ordered chain, and the chain is left exactly as it was. That is
-        // sound because core_lcp is idempotent: it advances offset and j
-        // together while the characters match and stops at the first mismatch
-        // or boundary, so running it from a position it has already reached
-        // advances nothing. core_extend_diagonal recomputes j as
-        // diag + offset, and warp_lcp moved both by the same amount, so it
-        // recomputes the same j. Everything the chain decides afterwards --
-        // the end check, the jump condition, the DFS over out-edges, the append
-        // order -- is a function of that final (offset, j) pair, and the pair
-        // is identical. Nothing about the ordered part moves.
-        //
-        // Only the seed's own LCP is shared out. The LCPs inside the recursion
-        // stay serial: they belong to cells the DFS has not created yet, and on
-        // the exact tier the recursion is usually not entered at all, because a
-        // read that ends inside its vertex never reaches the last column.
-        //
-        // tx < 32 is warp-uniform (blockDim.x is 64, 128 or 256, so warp 0 is
-        // full), every lane reads the same cell, and warp_lcp needs both.
+        // Seed a score 0: warp 0 avanza la cella (warp_seed_offset), poi il
+        // thread 0 esegue la catena ordinata com'era. tx < 32 e' uniforme e
+        // tutte le lane leggono la stessa cella: warp_lcp vuole entrambe.
         if (sh.block_score == 0 && tx < 32) {
             const Cell seed = qs.bs_m_jumps_wf[0];
             const int32_t new_offset =
                 warp_seed_offset(query, query_len, graph, seed.vertex_id,
                                  seed.diag, seed.offset);
             if (tx == 0) {
-                // Lane 0 is thread 0, so no barrier separates this write from
-                // the read below: it is the same thread, in program order.
+                // La lane 0 e' il thread 0: stesso thread, niente barriera.
                 qs.bs_m_jumps_wf[0].offset = new_offset;
 
                 bool end = sh.block_end != 0;
@@ -1486,10 +1061,8 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
         }
         __syncthreads();
 
-        // vd_new_score: one active vertex per thread. Each entry belongs to a
-        // single vertex and they all get the same 0, so the result does not
-        // depend on which thread clears which. sh.block_score is uniform (thread 0
-        // bumped it before the barrier) and nothing writes vd_num_active here.
+        // vd_new_score, un vertice attivo per thread: ogni entry e' di un solo
+        // vertice e prendono tutte lo stesso 0, quindi non conta chi pulisce cosa.
         {
             const int pos = vd_new_score_slot(qs, sh.block_score);
             for (int a = tx; a < qs.vd_num_active; a += ntx) {
@@ -1500,11 +1073,9 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     }
 
     if (tx == 0) {
-        // Past kMaxActiveDiags diagonals the append to sp_diags is dropped
-        // while the winning cell is still written, so a cell can be left
-        // active with nothing to reset it. The result of this query is already
-        // discarded; this stops the dirt from reaching the next one on this
-        // state, by making it clear the whole of sp_off again.
+        // Oltre kMaxActiveDiags l'append e' scartato ma la cella vincente si
+        // scrive lo stesso, quindi puo' restarne una attiva che nessuno resetta.
+        // Il risultato e' gia' buttato: sp_cleared a 0 non passa lo sporco oltre.
         if (qs.capacity_exceeded) {
             qs.sp_cleared = 0;
         }
@@ -1522,26 +1093,9 @@ __device__ void align_one(QueryState &qs, const AlignScoring &scoring,
     __syncthreads();
 }
 
-/**
- * @brief Two blocks of 256 threads per SM, which caps ptxas at 128 registers.
- *
- * Without this ptxas takes 175, because nothing told it not to: the kernel has
- * no spills at 175 and none at 128 either, so the extra 47 registers buy
- * scheduling freedom rather than correctness, and they cost occupancy --
- * 65536 / (175 x 32) is 11 warps per SM against 16 at 128.
- *
- * 128 is the number docs/../profiling/campagna_cuda/REPORT.md set as the target
- * for 50 % occupancy and never reached. Grouping the block state into
- * BlockShared is what made it reachable without spilling: the same cap on the
- * eighteen-variable version costs 16 more bytes of stack.
- *
- * The maximum is 256 because that is the widest block align_batch will launch;
- * 64 and 128 run under the same cap and simply have registers to spare.
- *
- * Static numbers, and the regression cannot check them -- registers do not
- * change results, so the goldens match either way. Measured on a T4 before
- * being believed.
- */
+// [cat. 6 occupancy] Due blocchi da 256 per SM tengono ptxas a 128 registri:
+// senza tetto ne prende 175 senza servirgli (0 spill), 11 warp invece di 16.
+// Vale solo con BlockShared: 2,14 ms contro 4,17 su c4_err_2k, T4.
 __global__ __launch_bounds__(256, 2) void theseus_align_batch_kernel(
                                            BatchView batch, GraphCsrView graph,
                                            const int32_t *start_node_ids,
@@ -1549,12 +1103,11 @@ __global__ __launch_bounds__(256, 2) void theseus_align_batch_kernel(
                                            AlignScoring scoring,
                                            QueryState *states,
                                            AlignResult *results) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
+    const int bx = blockIdx.x;
 
-    // One block per query: the block index is the query index.
-    const int32_t query_id = bx;
+    const int32_t query_id = bx;   // un blocco per query
     if (query_id >= batch.num_seqs) {
         return;
     }
@@ -1563,9 +1116,8 @@ __global__ __launch_bounds__(256, 2) void theseus_align_batch_kernel(
 
     __shared__ BlockShared sh;
 
-    // One tile per staging buffer, sized at launch on ntx. Cell first
-    // because it is the most strictly aligned member; the layout must match
-    // kernel_shared_bytes().
+    // Un tile per buffer di staging, dimensionato al lancio su ntx. Cell per
+    // prima perche' ha l'allineamento piu' stretto; combacia con kernel_shared_bytes().
     extern __shared__ unsigned char smem[];
     Cell *tile = reinterpret_cast<Cell *>(smem);
     int *tile_valid = reinterpret_cast<int *>(tile + ntx);
@@ -1592,10 +1144,9 @@ __global__ __launch_bounds__(256, 2) void theseus_align_batch_kernel(
     const int32_t begin = batch.offsets[query_id];
     const int32_t end = batch.offsets[query_id + 1];
 
-    // Stage the query in shared memory when it fits, and hand align_one that
-    // pointer instead of the global one. Everything downstream takes the query
-    // as a const char * and only reads it, so the substitution is invisible:
-    // same bytes, same indices, generic addressing does the rest.
+    // [cat. 5 tiling] Se ci sta, la query si copia in shared e ad align_one si
+    // passa quel puntatore. A valle e' un const char * in sola lettura, quindi la
+    // sostituzione e' invisibile: stessi byte, stessi indici.
     const int32_t query_len = end - begin;
     const char *query = batch.chars + begin;
     if (query_len <= kQueryTileBytes) {
@@ -1613,7 +1164,7 @@ __global__ __launch_bounds__(256, 2) void theseus_align_batch_kernel(
 
 __global__ void traceback_meta_kernel(const QueryState *states, int32_t count,
                                       TracebackMeta *metadata) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= count) return;
     const QueryState &state = states[i];
     metadata[i] = TracebackMeta{state.bs_m_wf_size,
@@ -1627,26 +1178,16 @@ __global__ void traceback_meta_kernel(const QueryState *states, int32_t count,
                                 {0, 0}};
 }
 
-/**
- * @brief Gather the cells the host backtrace will read into one dense buffer.
- *
- * One block per query. Each block writes its three used prefixes -- M, M jumps,
- * I jumps, in that order -- starting at base[i], the exclusive prefix sum of
- * the three sizes that the host computed from the metadata it has just read
- * back. Host and device agree because both derive the layout from the same
- * numbers; nothing is scanned twice and no device-side scan is needed.
- *
- * This is what turns the traceback D2H from a fixed 288 KB per query into the
- * bytes the query actually produced: 24 cells on average, 600 bytes, against
- * 12 288 cells copied before.
- */
+// Compatta le celle del backtrace host: un blocco per query scrive i suoi tre
+// prefissi (M, M jumps, I jumps) da base[i], prefix sum esclusiva dell'host.
+// Porta la D2H da 288 KB fissi per query ai byte prodotti: 24 celle su 12 288.
 __global__ void pack_traceback_kernel(const QueryState *states, int32_t count,
                                       const int32_t *base, Cell *packed) {
-    const int32_t i = static_cast<int32_t>(blockIdx.x);
+    const int i = blockIdx.x;
     if (i >= count) return;
     const QueryState &state = states[i];
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
 
     Cell *out = packed + base[i];
     const int32_t m = state.bs_m_wf_size;
@@ -1664,25 +1205,20 @@ __global__ void pack_traceback_kernel(const QueryState *states, int32_t count,
     }
 }
 
-/**
- * @brief Copy the CSR back out, one block per vertex.
- *
- * Each block reaches its own text and out-edges through the offset arrays,
- * which is the traversal the alignment kernel will do. Reading the graph any
- * other way here would test the upload but not the traversal.
- */
+// Rilegge il CSR, un blocco per vertice. Ogni blocco arriva al proprio testo e ai
+// propri archi dagli array di offset, cioe' con la stessa traversata del kernel di
+// allineamento: leggerlo in altro modo verificherebbe l'upload ma non quella.
 __global__ void graph_readback_kernel(GraphCsrView graph,
                                       char *out_vertex_chars,
                                       int32_t *out_vertex_offsets,
                                       int32_t *out_edge_targets,
                                       int32_t *out_edge_overlaps,
                                       int32_t *out_edge_offsets) {
-    const int32_t tx = static_cast<int32_t>(threadIdx.x);
-    const int32_t ntx = static_cast<int32_t>(blockDim.x);
-    const int32_t bx = static_cast<int32_t>(blockIdx.x);
+    const int tx = threadIdx.x;
+    const int ntx = blockDim.x;
+    const int bx = blockIdx.x;
 
-    // One block per vertex: the block index is the vertex id.
-    const int32_t v = bx;
+    const int32_t v = bx;   // un blocco per vertice
     if (v >= graph.num_vertices) {
         return;
     }
@@ -1712,13 +1248,9 @@ __global__ void graph_readback_kernel(GraphCsrView graph,
 
 }  // namespace
 
-/**
- * @brief The launch wrappers declared in kernel_launch.h.
- *
- * Each one owns its kernel's geometry -- the block count, and for the alignment
- * kernel the dynamic shared memory -- so that no caller can disagree with the
- * kernel about either. They launch and report; waiting is the caller's business.
- */
+// I wrapper di lancio dichiarati in kernel_launch.h. Ognuno possiede la geometria
+// del proprio kernel (blocchi e, per l'allineamento, la shared dinamica), cosi'
+// nessun chiamante puo' contraddirlo. Lanciano e riportano, non aspettano.
 cudaError_t launch_seq_length(int32_t threads_per_block, const int32_t *offsets,
                               int32_t num_seqs, int32_t *out_seq_lengths) {
     const int blocks = (num_seqs + threads_per_block - 1) / threads_per_block;
@@ -1733,7 +1265,6 @@ cudaError_t launch_align_batch(int32_t threads_per_block, const BatchView &batch
                                const int32_t *start_offsets,
                                AlignScoring scoring, QueryState *states,
                                AlignResult *results) {
-    // One block per query, for the whole alignment.
     theseus_align_batch_kernel<<<batch.num_seqs, threads_per_block,
                                  kernel_shared_bytes(threads_per_block)>>>(
         batch, graph, start_node_ids, start_offsets, scoring, states, results);
@@ -1751,7 +1282,6 @@ cudaError_t launch_traceback_meta(int32_t threads_per_block,
 cudaError_t launch_pack_traceback(int32_t threads_per_block,
                                   const QueryState *states, int32_t count,
                                   const int32_t *base, Cell *packed) {
-    // One block per query: each gathers its own three prefixes.
     pack_traceback_kernel<<<count, threads_per_block>>>(states, count, base,
                                                         packed);
     return cudaGetLastError();
@@ -1763,8 +1293,7 @@ cudaError_t launch_graph_readback(const GraphCsrView &graph,
                                   int32_t *out_edge_targets,
                                   int32_t *out_edge_overlaps,
                                   int32_t *out_edge_offsets) {
-    // One block per vertex, 32 threads: a vertex's text and out-edge list are
-    // both short, and the traversal is the one the alignment kernel does.
+    // Un blocco per vertice, 32 thread: testo e archi di un vertice sono corti.
     graph_readback_kernel<<<graph.num_vertices, 32>>>(
         graph, out_vertex_chars, out_vertex_offsets, out_edge_targets,
         out_edge_overlaps, out_edge_offsets);

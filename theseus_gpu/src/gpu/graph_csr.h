@@ -6,32 +6,21 @@
 #include "graph.h"
 #include "gpu/align_gpu.h"
 
-/**
- * @file graph_csr.h
- * @brief Host-side CSR mirror of a Graph.
- *
- * This is ordinary host C++: it owns std::vectors and is compiled by the host
- * compiler. Only the view() it hands out crosses into the CUDA backend.
- */
+// Copia CSR host-side di un Graph.
+// Normale C++ host: possiede std::vector ed e' compilato dal compilatore host.
+// Verso il backend CUDA passa solo la view() che espone.
 
 namespace theseus {
 namespace gpu {
 
 class GraphCsr {
 public:
-    /**
-     * @brief Flatten @p graph into CSR buffers.
-     *
-     * Vertex names and in-edges are dropped: the alignment never reads them,
-     * they only serve GAF and GFA output on the host.
-     */
+    // Appiattisce graph in buffer CSR. Nomi dei vertici e in-edges vengono
+    // scartati: l'allineamento non li legge, servono solo all'output host.
     explicit GraphCsr(const Graph &graph);
 
-    /**
-     * @brief View over the owned buffers, ready for upload_graph().
-     *
-     * Valid as long as this object lives.
-     */
+    // Vista sui buffer posseduti, pronta per upload_graph().
+    // Valida finche' vive questo oggetto.
     GraphCsrView view() const;
 
     int32_t num_vertices() const { return num_vertices_; }

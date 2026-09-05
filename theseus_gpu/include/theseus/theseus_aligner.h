@@ -50,41 +50,30 @@ namespace theseus
 
     class TheseusAlignerImpl; // Forward declaration of the implementation class.
 
-    /**
-     * @brief Diagonals one query's flattened ScratchPad can hold.
-     *
-     * A batch needs `max_vertex_length + max_query_length + 1` of these; anything
-     * more overflows and the alignment cannot run on the device. Exposed so
-     * callers can size a batch, and so tests can build an input that is certain
-     * to exceed it without hard-coding the value.
-     */
+    // Diagonali che tiene la ScratchPad di una query: un batch ne vuole
+    // max_vertex_length + max_query_length + 1, oltre non gira sul device.
+    // Esposta per dimensionare un batch e per costruire input che la sforano.
     int scratchpad_span();
 
-    /**
-     * @brief What the GPU backend actually did with a batch.
-     *
-     * The backend silently falls back to the CPU whenever it cannot do the work,
-     * so callers need a way to tell a real device run from a fallback.
-     */
+    // Cosa ha fatto davvero il backend con un batch. Ricade sulla CPU in
+    // silenzio quando non ce la fa, quindi serve distinguere un run vero.
     struct GpuBatchReport
     {
         bool device_used = false;        // A CUDA kernel ran on this batch
         bool aligned_on_device = false;  // The alignment itself ran on the device
-        // The returned alignments were reconstructed from the device QueryState.
-        // False means the kernel ran but its result was unusable and these are
-        // the CPU's alignments: correct output, but no evidence about the kernel.
+        // Gli allineamenti tornati vengono dalla QueryState del device. False vuol
+        // dire che il kernel e' girato ma il risultato era inservibile e questi
+        // sono quelli della CPU: output giusto, ma niente prove sul kernel.
         bool result_from_device = false;
-        // The wavefronts outgrew their fixed capacity. Harmless on the CPU, which
-        // reallocates, but it means this data cannot run on a device buffer yet.
+        // I wavefront hanno sforato la capacita' fissa: innocuo sulla CPU, che
+        // rialloca, ma questi dati su un buffer device ancora non ci girano.
         bool wavefront_capacity_exceeded = false;
-        // A fixed-capacity buffer in the flattened QueryState (ScratchPad span,
-        // BeyondScope wavefronts, ...) was too small. Same meaning as
-        // wavefront_capacity_exceeded for those device-shaped buffers.
+        // Un buffer a capacita' fissa della QueryState non e' bastato. Stesso
+        // significato di wavefront_capacity_exceeded, per quei buffer.
         bool query_state_capacity_exceeded = false;
-        // Diagonals this batch needs versus the diagonals a QueryState holds,
-        // filled in before the kernel launches when the batch cannot fit. Zero
-        // means the batch fits. Derived from the graph and the queries, so it
-        // says what to raise kScratchpadSpan to rather than only that it is low.
+        // Diagonali che vuole il batch contro quelle che tiene una QueryState,
+        // riempite prima del lancio quando non ci sta; 0 vuol dire che ci sta.
+        // Derivate dal grafo e dalle query: dicono a quanto alzare kScratchpadSpan.
         int scratchpad_span_required = 0;
         int scratchpad_span_available = 0;
         int gpu_threads_per_block = 128;
@@ -159,26 +148,13 @@ namespace theseus
                 std::string &start_node,
                 int start_offset = 0);
 
-        /**
-         * GPU alignment entry point for a batch of sequences.
-         *
-         * This is the shape the device path needs: the whole batch is uploaded
-         * once and one CUDA block is assigned per query, so the transfer is amortised
-         * across the batch instead of paid per sequence.
-         *
-         * The kernel computes one complete alignment per block, with the phases
-         * that are independent per element spread across the block's threads.
-         * The normal path reconstructs the final GAF-compatible alignment from
-         * copied-back device state. Explicit validators can request a CPU
-         * endpoint comparison with @p verify_with_cpu.
-         *
-         * @param seqs Sequences to be aligned
-         * @param start_nodes Starting node in the graph, one per sequence
-         * @param start_offsets Starting offset within the starting node, one per sequence
-         * @param report Optional backend status, see GpuBatchReport
-         * @param verify_with_cpu Run the CPU aligner as an explicit oracle
-         * @return Alignments, in the same order as @p seqs
-         */
+        // Entry point GPU per un batch di sequenze: si carica tutto una volta e
+        // si assegna un blocco CUDA per query, cosi' il transfer si ammortizza
+        // sul batch invece di pagarlo a sequenza.
+
+        // Il kernel fa un allineamento completo per blocco e l'host ricostruisce
+        // il GAF dallo stato tornato. @p verify_with_cpu fa girare anche la CPU
+        // come oracolo esplicito. Gli allineamenti tornano nell'ordine di @p seqs.
         std::vector<Alignment> align_batch_gpu(
                 const std::vector<std::string> &seqs,
                 std::vector<std::string> &start_nodes,
